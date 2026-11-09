@@ -477,12 +477,14 @@ claim('E2E5', '无 key 时脚本必须 SKIP 而不是伪装通过', () => {
   return 'SKIP 语义清楚';
 });
 
-claim('E2E6', 'evidence/ 和 test/e2e 在 files 白名单里', () => {
+claim('E2E6', 'evidence/ 和 test/e2e 必须**不**在 files 白名单里（证据不进 npm 包）', () => {
   const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
   const files = pkg.files ?? [];
-  assert(files.includes('evidence'), 'files 缺 evidence——存证不会随包发布');
-  assert(files.includes('test/e2e'), 'files 缺 test/e2e——用户拿不到复跑脚本');
-  return '都在白名单';
+  // 2026-11 决策：证据（audits/ledger/impl.tgz 约 1.9MB）和验证脚本留在源码仓库，
+  // 不进 npm 包——用户装包只需要运行需要的文件。README 用 GitHub URL 指向它们。
+  assert(!files.includes('evidence'), 'files 含 evidence——1.9MB 证据会被打进 npm 包');
+  assert(!files.includes('test/e2e'), 'files 含 test/e2e——验证脚本不该进包');
+  return '都正确排除';
 });
 
 // ================================================================ 汇总

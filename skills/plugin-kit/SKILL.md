@@ -84,10 +84,12 @@ P0 需求 → P1 计划 → P1.5 探针门 → P2 执行 → P3 验证 → P3b �
 
 | 文件 | 什么时候读 |
 |---|---|
+| [`references/walkthrough.md`](references/walkthrough.md) | **先看这个**。一次真实打回的完整片段——比读 23 条铁律有效 |
 | [`references/process.md`](references/process.md) | 开工前必读；每阶段结束对照。23 条铁律 + 9 张阶段卡 |
 | [`references/reviewer.md`](references/reviewer.md) | 要开审查员时。9 个动作 + 4 级证据等级 + 任务书模板 |
 | [`references/tools.md`](references/tools.md) | 做到某个阶段卡住时。每个阶段用什么检查、判据是什么、**技术细节该去哪个内置 skill 找** |
-| [`references/evidence.md`](references/evidence.md) | 想确认这套东西靠不靠谱时。**尤其「诚实的边界」那一节** |
+| [`references/evidence.md`](references/evidence.md) | 想确认这套东西靠不靠谱时。**九条边界，第一条最要紧** |
+| [`references/limits.md`](references/limits.md) | **决定要不要用这套东西之前**。两条还没关掉的边界（成本未测 / 独立性未验） |
 
 ## 可调用的脚本
 

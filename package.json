@@ -33,8 +33,6 @@
     "locale/*.json",
     "icon.svg",
     "README.md",
-    "evidence",
-    "test/e2e",
     "CHANGELOG.md",
     "LOGGING.md",
     "LICENSE"

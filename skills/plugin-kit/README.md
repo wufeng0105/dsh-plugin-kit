@@ -52,7 +52,9 @@
 | `references/process.md` | 23 条铁律 + 9 张阶段卡（P0–P5 + P1.5 + P3.5 + P3b） |
 | `references/reviewer.md` | 审查员：9 个动作、4 级证据等级、任务书模板 |
 | `references/tools.md` | 每个阶段用什么检查、判据是什么 |
-| `references/evidence.md` | 这套东西凭什么成立、七条诚实的边界 |
+| `references/evidence.md` | 这套东西凭什么成立、九条诚实的边界 |
+| `references/limits.md` | **决定要不要用之前读**：两条还没关掉的边界（成本未测 / 独立性未验） |
+| `references/walkthrough.md` | **先看这个**：一次真实打回的完整片段 |
 | `scripts/recheck.mjs` | 触点复检脚本（DSH 升级后验触点是否还成立） |
 | `assets/` | 可复制到项目的模板与样例 |
 
@@ -72,9 +74,9 @@ DSH 自带 4 个 skill（`cordis-plugin-development` 等），讲**怎么用宿�
 
 ## 边界
 
-三条最重要的（完整八条见 `references/evidence.md`）：
+三条最重要的（完整九条见 `references/evidence.md`）：
 
-1. **运行时验证基本缺失**——P3.5 机制已补，但还没在真实插件上跑过一轮。
+1. **"换人"从没真的换过**——三个阶段换了上下文，但同一模型、同一作者、同一机器、同一宿主版本。
 2. **中间态不可复跑**——支撑铁律的事故证据是报告文字，不是可重放快照。
 3. **审查员会误判**——它漏过也错过，只是比自评更可靠。
 
@@ -82,4 +84,4 @@ DSH 自带 4 个 skill（`cordis-plugin-development` 等），讲**怎么用宿�
 
 **把检查从写的人手里拿走，交给一个不参与写的审查员，能抓住自评永远抓不到的错。**
 
-代价：它不会自动运行，每道门要人工开；判据是事故喂出来的；运行时它验不了。
+代价：判据是事故喂出来的；审查员会误判；中间态留不住。**门不必再人工开了**——插件形态用 `tools/pre-execute` 机械拦截。

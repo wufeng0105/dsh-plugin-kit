@@ -186,7 +186,11 @@ Web GUI 模式下日志正常显示。
 
 ## 真机验证：怎么自己复跑
 
-`evidence/` 里存着每次真机验证的结果摘要。**不要信摘要，自己跑一遍。**
+> **这一节的内容在源码仓库里，不在 npm 包里。**
+> `npm install` 只装运行需要的文件；验证脚本和存证在 GitHub：
+> <https://github.com/wufeng0105/dsh-plugin-kit>
+
+`evidence/` 存着每次真机验证的结果摘要。**不要信摘要，clone 仓库自己跑一遍。**
 
 ```powershell
 $env:SN_API_KEY = '<你的 key>'
@@ -219,7 +223,7 @@ node test/e2e/run.mjs
 
 ### 跑完会写什么
 
-`evidence/<日期>-real-host.md`，含**环境指纹**（Node / DSH 版本 / 时间）和每个场景的判据。
+`evidence/<日期>-real-host.md`（在源码仓库里），含**环境指纹**（Node / DSH 版本 / 时间）和每个场景的判据。
 
 **为什么要记环境指纹**：同一个结论换个 DSH 版本可能就不成立，记录里必须能看出是在哪个版本上验的。
 
