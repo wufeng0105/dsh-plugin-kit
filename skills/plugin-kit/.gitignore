@@ -1,0 +1,9 @@
+# 运行时 / 临时
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 复检产物（清单与快照按需入库，输出不入库）
+recheck-output.*

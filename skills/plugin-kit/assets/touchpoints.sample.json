@@ -1,0 +1,63 @@
+{
+  "_comment": "触点清单样例。字段说明见 plugin-kit/TOOLS.md 的「触点清单怎么写」。复制本文件到你的项目里改。",
+  "host": "0.2.1-rc.5",
+  "touchpoints": [
+    {
+      "id": "svc.tools.guard",
+      "surface": "service",
+      "ref": "ctx.tools.guard()",
+      "code": "src/index.js:42",
+      "why": "同步硬否决工具调用；deny 必须在同步阶段决定",
+      "probe": {
+        "kind": "service",
+        "service": "tools",
+        "method": "guard",
+        "signatureIncludes": ["guard: ToolGuard"]
+      },
+      "status": "verified",
+      "fallback": "不注册守卫，工具调用不再被拦"
+    },
+    {
+      "id": "evt.agent-created",
+      "surface": "event",
+      "ref": "agent/created",
+      "code": "src/index.js:88",
+      "why": "每个 agent 创建时注入 per-agent 行为",
+      "probe": {
+        "kind": "event",
+        "event": "agent/created",
+        "mode": "serial",
+        "signatureIncludes": ["'agent/created'"]
+      },
+      "status": "verified",
+      "fallback": "只能对已存在的 agent 生效，新建的不受影响"
+    },
+    {
+      "id": "slot.input-right",
+      "surface": "slot",
+      "ref": "conversation.input.right",
+      "code": "client.js:120",
+      "why": "在输入行工具区放按钮",
+      "probe": {
+        "kind": "none",
+        "manual": "客户端探测常超时；需在页面在线时用 Slots.listSubTree 核对，或读安装包源码"
+      },
+      "status": "unverified",
+      "fallback": "按钮不显示，功能不可用"
+    },
+    {
+      "id": "pkg.files",
+      "surface": "package",
+      "ref": "package.json files[]",
+      "code": "package.json:20",
+      "why": "npm 打包白名单；漏项会导致装上后 import 失败",
+      "probe": {
+        "kind": "package",
+        "file": "package.json",
+        "path": ["files"]
+      },
+      "status": "verified",
+      "fallback": "打包缺文件，安装后起不来"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Stage Gate",
+    "description": "Blocks writes into a downstream stage directory until the upstream gate record exists. Off by default for projects without a stages/ layout."
+  }
+}

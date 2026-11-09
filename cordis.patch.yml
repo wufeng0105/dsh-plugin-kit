@@ -1,0 +1,17 @@
+# dsh-plugin-kit bundle patch —— 一行 insert。
+#
+# 行 id 必须与 index.js 的 `export const name` 一致（都是 `plugin-kit`）。
+# 包名 `@wufeng0105/dsh-plugin-kit` 是另一回事，不需要相等。
+#
+# 装了这行会同时得到三段：
+#   - skill `plugin-kit` 出现在宿主 skill 目录
+#   - systemPrompt 里多一段常驻纪律
+#   - tools/pre-execute 拦住未过门的写
+- insert:
+    - id: plugin-kit
+      name: '@wufeng0105/dsh-plugin-kit'
+      config:
+        enabled: true
+        mode: enforce
+        root: stages
+        gateFile: GATE.json
