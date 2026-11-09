@@ -1,0 +1,57 @@
+{
+  "_comment": "宿主探测快照样例。真实使用时用 cordis_inspect_query 导出后填这个结构。",
+  "host": {
+    "version": "0.2.1-rc.5",
+    "exportedAt": "2026-11-08T00:00:00+08:00",
+    "source": "cordis_inspect_query"
+  },
+  "services": {
+    "tools": {
+      "description": "Concrete tool registry and scoped executor dispatcher.",
+      "methods": {
+        "register": "register(definition: ToolDefinition, options?: ToolRegistrationOptions): () => void",
+        "guard": "guard(guard: ToolGuard): () => void",
+        "restrict": "restrict(filter: ToolRestriction): () => void",
+        "execute": "async execute(input: ToolBatchInput): Promise<ToolBatchResult>"
+      },
+      "types": {
+        "ToolGuard": "export interface ToolGuard {\n  (exec: ToolExecution): string | undefined;\n}"
+      }
+    },
+    "systemPrompt": {
+      "methods": {
+        "section": "section(section: PromptSection): () => void",
+        "context": "context(context: PromptContext): () => void",
+        "assemble": "async assemble(context?: AssembleContext): Promise<PromptAssembly>"
+      }
+    }
+  },
+  "events": {
+    "agent/created": {
+      "mode": "serial",
+      "signature": "'agent/created'(this: Scoped<Agent>, payload: { agent: Agent; source: SessionStartSource; signal?: AbortSignal }): undefined | Promise<undefined>",
+      "types": {
+        "SessionStartSource": "export type SessionStartSource = 'initial' | 'resume' | 'fork';"
+      }
+    },
+    "tools/pre-execute": {
+      "mode": "waterfall",
+      "signature": "'tools/pre-execute'(this: Scoped<ToolsService>, exec: ToolExecution, next: () => Promise<PreToolDecision>): Promise<PreToolDecision>",
+      "types": {
+        "PreToolDecision": "export type PreToolDecision = { kind: 'allow' } | { kind: 'deny'; reason: string } | { kind: 'ask' } | { kind: 'cancel' };"
+      }
+    }
+  },
+  "configs": {
+    "_comment": "可选：用 Config.listConfigs 查到的插件 Config schema，按 entry id 存。",
+    "include:my-plugin": {
+      "status": "schema",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "enabled": { "type": "boolean", "default": true }
+        }
+      }
+    }
+  }
+}
