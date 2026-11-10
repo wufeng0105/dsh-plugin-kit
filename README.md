@@ -27,7 +27,7 @@
 
 本包提供的是第三种，**并且把第一种的模板和一份完整的项目骨架一起给了**：
 
-- [`skills/plugin-kit/template/`](skills/plugin-kit/template/) —— 新项目的骨架，整目录复制过去即可（7 个文件，见 SKILL.md「新建一个插件项目」）
+- [`skills/plugin-kit/template/`](skills/plugin-kit/template/) —— 新项目的骨架，整目录复制过去即可（6 个文件，见 SKILL.md「新建一个插件项目」）
 - [`skills/plugin-kit/template/AGENTS.md`](skills/plugin-kit/template/AGENTS.md) —— 只想给已有项目加一份项目说明时，单独复制这一个
 
 ## 三样东西分别是什么
@@ -140,20 +140,21 @@ skill 目录里出现 plugin-kit
 dsh-plugin-kit/
 ├── index.js                 三段式入口
 ├── lib/
-│   ├── gate.js              判定内核（纯函数，38 条测试）
-│   ├── ledger.js            台账（13 条测试）
-│   ├── skill-provider.js    skill 注册（39 条测试）
+│   ├── gate.js              判定内核（纯函数）
+│   ├── ledger.js            台账
+│   ├── skill-provider.js    skill 注册
 │   └── discipline.js        常驻纪律文本
 ├── skills/plugin-kit/       判据（唯一源）
 │   ├── SKILL.md
-│   ├── references/          6 份判据正文
-│   ├── assets/              可复制模板
+│   ├── references/          5 份判据正文
+│   ├── template/            项目骨架（复制到新项目根）
+│   ├── assets/              可复制样例
 │   ├── scripts/             recheck.mjs
 │   └── host-skills/         宿主自带 4 个 skill 的普通文件副本
 ├── vendor/
 │   ├── config.js            Config（schemastery Schema）
 │   └── schemastery.mjs      判定用的 Schema 实现
-└── test/                    196 条（90 内核 + 5 打包 + 43 冒烟 + 38 断言 + 14 失败信号 + 6 变异）
+└── test/                    全部验证入口见 npm run check
 ```
 
 **自足**：这个包被单独下载、装进任何 profile 都能完整工作。判据、资产、宿主文档副本全在包内，**不依赖任何外部目录**。

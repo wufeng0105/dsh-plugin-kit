@@ -1,6 +1,7 @@
 # 材料盘点（MATERIALS）
 
-> 状态：**盘点完成，待定主线**
+> 状态：**已完成使命**——盘点、主线裁决（→ `OUTLINE.md`）、7 项改动全部执行完。
+> 留作工作记录。后续文档状态以 `OUTLINE.md` 为准。
 > 日期：2026-11-10
 > 范围：`DshBundle\dsh-plugin-kit\`（16 个 md + evidence/），不含 `process-lab/` 与 `dsh-skills-latest/`
 

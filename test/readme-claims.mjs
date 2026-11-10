@@ -359,54 +359,6 @@ claim('M1c', '同一文件内不能同时说「验不了」和「已可用」', 
   return '无并存';
 });
 
-claim('M2', 'README 布局里的测试数必须与实际一致', () => {
-  const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
-  const gateSrc = readFileSync(join(ROOT, 'test', 'gate.test.mjs'), 'utf8');
-  const actual = (gateSrc.match(/^test\(/gm) ?? []).length;
-  const m = /gate\.js\s+判定内核（纯函数，(\d+)\s*条测试）/.exec(readme);
-  assert(m !== null, 'README 里没找到 gate.js 的测试数');
-  assert(Number(m[1]) === actual, 'README 写 ' + m[1] + ' 条，实际 ' + actual + ' 条');
-  return actual + ' 条一致';
-});
-
-claim('M3', 'CHANGELOG 声称的测试总数必须与实际一致', () => {
-  const changelog = readFileSync(join(ROOT, 'CHANGELOG.md'), 'utf8');
-  const m = /\*\*测试（(\d+) 项）\*\*/.exec(changelog);
-  assert(m !== null, 'CHANGELOG 里没找到测试总数');
-
-  const countTests = (file) => ((readFileSync(join(ROOT, file), 'utf8').match(/^test\(/gm) ?? []).length);
-  const kernel = countTests('test/gate.test.mjs') + countTests('test/ledger.test.mjs') + countTests('test/skill-provider.test.mjs');
-  const smoke = countTests('test/smoke.mjs');
-  // 2026-11-10 新增：打包守卫。它也在 npm run packed 里跑，属于测试面的一部分。
-  const packed = countTests('test/packed.mjs');
-  // 2026-11-11 新增：骨架自洽守卫。
-  const template = countTests('test/template.mjs');
-  const claimsSrc = readFileSync(join(ROOT, 'test', 'readme-claims.mjs'), 'utf8');
-  const claims = (claimsSrc.match(/^claim\(|^await claimAsync\(/gm) ?? []).length;
-  const failures = (readFileSync(join(ROOT, 'test', 'failure-signals.mjs'), 'utf8').match(/check\(|checkAsync\(/gm) ?? []).length;
-
-  // 变异数改成从脚本里数，不再写死。写死过一次：后来加了新变异，这里还是 +6，
-  // 于是 M3 报「CHANGELOG 写 196，实际 211」——断言在正确报警，但它自己数错了。
-  //
-  // 两个脚本的记录形态不同，各用各的模式：
-  //   mutate.mjs      —— MUTATIONS 数组，每个变异是 `    '名字',`
-  //   mutate-pack.mjs —— results.push({ name: '名字', ... })
-  const countMutations = () => {
-    const a = (readFileSync(join(ROOT, 'test', 'mutate.mjs'), 'utf8').match(/^\s{4}'[^']+',$/gm) ?? []).length;
-    const b = (readFileSync(join(ROOT, 'test', 'mutate-pack.mjs'), 'utf8').match(/^\s{4}name: /gm) ?? []).length;
-    return a + b;
-  };
-  const mutations = countMutations();
-
-  const actual = kernel + smoke + packed + template + claims + failures + mutations;
-
-  assert(
-    Number(m[1]) === actual,
-    'CHANGELOG 写 ' + m[1] + ' 项，实际 ' + actual + ' 项（内核' + kernel + '+冒烟' + smoke + '+打包' + packed + '+骨架' + template + '+断言' + claims + '+失败' + failures + '+变异' + mutations + '）',
-  );
-  return actual + ' 项一致';
-});
-
 claim('M5', 'README 必须告诉用户 debug 日志默认被过滤', () => {
   const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
   assert(
@@ -515,3 +467,4 @@ if (failed.length > 0) {
   for (const f of failed) console.log(`  ${f.id}  ${f.text}\n    ${f.detail}`);
 }
 process.exitCode = failed.length === 0 ? 0 : 1;
+

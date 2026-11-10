@@ -162,7 +162,7 @@
 
 ### 补记：用户负向证据（2026-11-10 12:27）
 
-E 阶段收官后用户说「设置页没看到」——**第 9 起缺陷，也是唯一一起由真实用户撞上、流程内部没抓到的**。
+E 阶段收官后用户说「设置页没看到」——**第 9 起缺陷，第一起由真实用户撞上、流程内部没抓到的**（此后第 10–12 起同样来自用户；当时只此一起，故记「唯一」）。
 
 根因两步：① 插件只装在 P3.5 的一次性 profile，跑完拆掉了，日常 `desktop` 从未装过 → 已补装；② 补装后仍看不到，查出 `slots.register` 被塞进 `slots.inject` 回调（market 先例证明 inject 是「等槽出现」的门控，不是注册入口）→ 已改为 register 直接调用 + inject 门控，并加 C4 护栏（专项变异证明会红）。
 
@@ -182,7 +182,7 @@ renderer console：`Uncaught SyntaxError: Unexpected token 'export'`。
 
 修法：client.js 重写为 ModuleLoader 形态；测试加 `load-client.mjs` 适配层；新增 `module-shape.test.mjs`（C5，模拟拼接脚本 parse，专项变异证明会红）；测试面 18→21。
 
-`process.md` P3.5 卡新增**模块形态条款**；`limits.md` L1 终值 184 分钟 / 63.9% / 10 起。
+`process.md` P3.5 卡新增**模块形态条款**；`limits.md` L1 当时记为 184 分钟 / 63.9% / 10 起（COST-VERDICT 终表口径）。**此后又发生第二次崩溃（Config），计入后 L1 终值更新为 204 分钟 / 70.8% / 12 起**——现由 `evidence.md` 承载。
 
 用户已用其他 IDE 彻底移除插件，DSH 恢复。**修复后的源码不要再装回日常 profile**，除非先过 C5 + 一次性 profile 真机启动验证。
 
@@ -253,20 +253,11 @@ Error: web boot: 1 entry did not activate
 - 启动四行自检：版本 + cwd、skill 注册、纪律段、拦截配置
 - 结构化字段白名单：`stage` / `code` / `path` / `tool`
 
-**测试（211 项）**
+**测试**
 
-- 内核单测 90
-- 接线冒烟 43（含日志规范 6 条）
-- **打包守卫 6**（`test/packed.mjs`：按 `npm pack` 真实文件表判定，不看工作区）
-- **骨架自洽守卫 9**（`test/template.mjs`：占位符三处一致、`Config` 形状、语法、marker、`AGENTS.md` 指路）
-- README 断言核对 38
-- 失败信号验证 14
-- 变异证明 11（`test/mutate.mjs` 6 + `test/mutate-pack.mjs` 5）
+全部验证入口是 `npm run check`（内核单测、打包守卫、骨架自洽、端到端复制实测、包外自足、冒烟、README 断言、失败信号、变异证明）。**各项数字不在此处维护**——统计性的数字没有决策含义，写两处就会漂移（本次审计实测：6 处数字漂移里 4 处是同一事实多处陈述）。
 
-**另有 18 项包外实测，不计入上面这 211 项**
-
-- `test/selfcontained.mjs`：真打 tgz → 解到包外 → 18 项断言。判据齐全、Host 半可 import、`readSkill` 报的 base 下真能读到 `host-skills/VERSION.json`
-- 不进计数是因为它需要整个 tarball，离线单测拿不到
+**有决策含义的数字只有一个，在 `evidence.md`**：E 阶段成本 204 分钟 / 占止损线 70.8% / 拦下 12 起——它是「这套东西值不值」的唯一依据。
 
 ### 修复
 

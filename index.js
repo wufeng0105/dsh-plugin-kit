@@ -243,11 +243,17 @@ export function apply(ctx, config = {}) {
   /**
    * 台账（C4）：优先 H15 storage，降级到内存 + 文件镜像。
    * 挂载是异步的，但不阻塞 apply —— 早期记录落内存，挂载后补写。
+   *
+   * onWarn 必须传：storage 挂载失败时「台账退到内存」只从这里报出来。
+   * 漏传 = 静默降级——用户以为台账在 storage 里，实际每次重启都丢，
+   * 而 LOGGING.md 的立会原则恰恰是「静默失败比报错更难查」。
+   * 2026-11-11 审计抓到：createLedger 有参数、这里没传，警告被吞了数月。
    */
   const ledger = createLedger({
     storage: ctx.get?.('storage'),
     root,
     baseDir: undefined, // 每次调用时按会话 cwd 现填
+    onWarn: (message) => log('warn', message),
   });
 
   /** marker 缓存（C3）：按项目根缓存，避免每次读盘。 */

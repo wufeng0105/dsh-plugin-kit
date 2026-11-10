@@ -146,7 +146,7 @@ template/
 | 2 | [`references/process.md`](references/process.md) | **什么算过**：23 条铁律 + 9 张阶段卡 | 「这一阶段算过了吗？」开工前必读，每阶段结束对照 |
 | 3 | [`references/tools.md`](references/tools.md) | **用什么检查**：每阶段的手段与判据 | 「这一步该跑什么？」卡住时读 |
 | 4 | [`references/reviewer.md`](references/reviewer.md) | **谁来判**：审查员的 9 个动作 + 4 级证据等级 + 任务书模板 | 「审查员会怎么打我回？」要开审查员时读 |
-| 5 | [`references/evidence.md`](references/evidence.md) | **凭什么信**：它证明了什么 + 十条边界 | 「我该信它到什么程度？」**决定要不要用之前读；前两条边界还没关掉，必须读** |
+| 5 | [`references/evidence.md`](references/evidence.md) | **凭什么信**：它证明了什么 + 哪些没证明 | 「我该信它到什么程度？」**决定要不要用之前读；两条还没关掉的边界必须读** |
 
 **为什么是这个顺序**：先看打回（知道疼）→ 再看判据（知道标准）→ 再看手段（知道怎么查）→ 再找审查员（知道谁查）→ 最后看它靠不靠谱（知道信多少）。
 

@@ -95,10 +95,12 @@
 
 ## 出处
 
-| 内容 | 来源 |
+**下列文件都在 process-lab 归档仓，本仓不含**——出处标注保留，是为了能追溯；但别按这些路径去找。
+
+| 内容 | 来源（归档仓） |
 |---|---|
 | 这次打回的原始报告 | `impl/round2-draft-studio/09-verification.md` |
-| 自查方法（改坏→红→改回） | `PROCESS.md` 的 P2 出口判据 |
-| 三条对应铁律 | `PROCESS.md` 的 23 条铁律 |
-| 九次打回的完整列表 | `EVIDENCE.md`「审查员抓到了什么」 |
+| 自查方法（改坏→红→改回） | process-lab 版 `PROCESS.md` 的 P2 出口判据（本仓现为 `process.md`） |
+| 三条对应铁律 | process-lab 版 `PROCESS.md` 的 23 条铁律（本仓现为 `process.md`） |
+| 九次打回的完整列表 | process-lab 版 `EVIDENCE.md`「审查员抓到了什么」（本仓现为 `evidence.md`） |
 | 九次打回背后的归纳 | `archive/v1.0.0/induction/v1.md` |

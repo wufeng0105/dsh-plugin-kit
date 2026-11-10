@@ -12,7 +12,7 @@
    - 设计模型可见的工具描述 → `agent-experience/`
 3. **先读那个目录下的 `PATHS-README.md`**。那 4 份文档里的 `references/xxx` 是相对**它们各自目录**写的，不是相对 `plugin-kit` 的 base directory。照 base 解析会落到 23 处不存在的文件。
 
-> 注意：`host-skills/` **不在本项目里**，在 `plugin-kit` 包里。本项目只有 7 个骨架文件。
+> 注意：`host-skills/` **不在本项目里**，在 `plugin-kit` 包里。本项目只有 6 个骨架文件。
 
 ## 查不到答案时的顺序
 
