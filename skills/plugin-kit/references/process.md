@@ -237,6 +237,12 @@ Remove-Item -Recurse (Join-Path $env:DSH_HOME "profiles\smoke")
 
 **模块形态条款（2026-11-10 崩溃事故）**：界面型插件的 `client.js` 不是 ESM 模块——宿主把**所有插件的 client.js 拼成一个大脚本**加载。含 `export`/`import` 会让整个拼接脚本 `SyntaxError: Unexpected token 'export'`，**web boot 失败、整个 DSH 起不来**。
 
+**完整插件集条款（2026-11-10 第二次崩溃）**：一次性 profile 如果只装待验插件（最小组合），**验不出插件间的冲突**。实测：同一插件在 3-bundle 的最小 profile 里能激活，混进完整 13+1 插件集就 `1 entry did not activate`，且宿主日志**没有 renderer 堆栈**（只有 `failed`），无法定位。
+
+P3.5 要验「装进真实环境不炸」，一次性 profile 必须**复刻目标环境的完整插件集**（同 bundle 组合），而不是只装待验插件。最小 profile 只能验「代码能不能加载」，不能验「混进去会不会冲突」。
+
+
+
 正确形态（picker / dshmarket / draft-studio 一致）：
 
 ```js

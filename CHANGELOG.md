@@ -101,6 +101,23 @@ archive-manager: TypeError: Cannot read properties of undefined (reading 'valida
 
 **两条宿主硬契约至此才完整**：client.js 用 ModuleLoader 形态（不能有 ESM）、index.js 的 Config 必须是 Schema 或不存在。
 
+### 第二次崩溃：混入完整插件集（2026-11-10 13:15）
+
+修掉 Config 问题后，按「建→装→启动→看设置页」顺序验，用户把插件装进日常 `desktop`（完整 13+1 bundle）重启，**又崩**：
+
+```
+Error: web boot: 1 entry did not activate
+@wufeng0105/dsh-archive-manager: failed   ← 这次没有堆栈
+```
+
+**关键差异**：同一插件在隔离最小 profile（3 bundle）里能激活、零 warning；混进完整插件集就激活失败，且日志**没有 renderer 堆栈**，无法定位。
+
+**两次崩溃共同根因**：我在离线/隔离环境**无法复现宿主的完整加载+激活场景**（27 个插件 client.js 拼一起加载）。23 条测试 + 4 变异全绿，全是验「代码逻辑」，没有一条验「宿主加载/激活行为」。P3.5 的最小 profile 只覆盖了最小组合。
+
+**处置**：用户用「禁用第三方插件」救回 DSH；我 `dsh plugin remove` 彻底移除、删 symlink；恢复 desktop 到出事前 13 bundle（不含我的插件）；隔离插件、删除复现现场。
+
+`process.md` P3.5 新增**完整插件集条款**：一次性 profile 必须复刻目标环境的完整 bundle 组合，最小 profile 验不出插件间冲突。
+
 ## [0.1.0] - 2026-11-09
 
 首个版本。合并了原 `plugin-kit`（skill）与 `dsh-stage-gate`（插件）。
