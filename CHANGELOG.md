@@ -233,7 +233,7 @@ Error: web boot: 1 entry did not activate
 - **纪律**：`systemPrompt` 常驻一段条件句，提示「有判据，去加载」
 - **强制力**：`tools/pre-execute` 拦截未过门的阶段产物写入
 
-**配置（5 项，全部可验）**
+**配置（全部可验）**
 
 - `enabled` — 只关拦截，skill 与纪律段仍生效
 - `mode` — `observe`（只记不发）/ `enforce`（真拦）

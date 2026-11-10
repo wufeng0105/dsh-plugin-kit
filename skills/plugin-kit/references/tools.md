@@ -142,7 +142,7 @@ node recheck.mjs --self-test    # 内建 fixture，证明脚本会变红
 
 ### 安装
 
-怎么装：见内置 skill `cordis-plugin-development`（`plugin_manager` 的用法与返回结构随宿主版本变化，不在这里复制）。
+怎么装：见内置 skill `cordis-plugin-development`。**注意 `plugin_manager` 只作用于当前 profile**——P3.5 要验的是「一次性 profile」，且要求日常 profile 未被改动，所以那一步的建/装顺序按 `process.md` 的 P3.5 卡走，不要用 `plugin_manager` 直接装。
 
 **判据**（这是流程判据，不随宿主变）：安装结果必须给出明确的"是否生效"字段，并且**日志、进程列表、页面 boot payload 都不能替代它**。拿不到这个字段，就不能声称已生效。
 
@@ -202,13 +202,3 @@ node recheck.mjs --self-test    # 内建 fixture，证明脚本会变红
 | `file` | 文件 | `path`、`sizeBytes` / `sha1` / `contains` |
 | `package` | package.json 字段 | `file`、`path`（数组）、`equals` |
 | `none` | 机器判不了 | `manual`（说明人工怎么查） |
-
-## 五、常见误用
-
-| 误用 | 后果 | 正确做法 |
-|---|---|---|
-| 用 `node --test` 代替验收 | 测试全绿 ≠ 验收通过（第三轮 111 个测试通过，5 项验收仍不通过） | 测试和验收分开记 |
-| 探测超时就标"已验" | 空真 | 标 `UNVERIFIABLE` + 证据等级 L3 |
-| 复检脚本只看输出不看退出码 | 红绿不分 | 判 `$LASTEXITCODE` |
-| 只跑一次 `--self-test` 不跑真实清单 | 脚本能红但清单没覆盖 | 两个都跑 |
-| 触点清单从计划抄 | 抄的是当时的认知，不是代码实际引用 | 从代码 grep 倒推 |

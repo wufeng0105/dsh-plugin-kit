@@ -17,19 +17,9 @@
 
 ## 三种执行方式
 
-同一套判据，有三种让人「不忘」的方式。**它们不是新旧两代**：
+同一套判据有三种执行方式：写进 `AGENTS.md`（短规则、每次注入）、做成 skill（长文按需加载）、**做成插件**（本包，宿主级强制）。
 
-| 方式 | 机制 | 何时用 | 代价 |
-|---|---|---|---|
-| 写进 `AGENTS.md` | 每次运行都注入 | 短规则、必须每次看见 | 太长会被稀释 |
-| 做成 skill | 按描述匹配加载 | 长内容、按需读 | 匹配不上就不出现 |
-| **做成插件**（本包） | 宿主级强制拦截 | 需要「不用记」 | 要改目录结构、要放 marker |
-
-本包提供的是第三种，**并且把第一种的模板和一份完整的项目骨架一起给了**：
-
-- [`skills/plugin-kit/template/`](skills/plugin-kit/template/) —— 新项目的骨架，整目录复制过去即可（6 个文件，见 SKILL.md「新建一个插件项目」）
-- [`skills/plugin-kit/template/AGENTS.md`](skills/plugin-kit/template/AGENTS.md) —— 只想给已有项目加一份项目说明时，单独复制这一个
-
+本包是第三种，并把前两种的载体一起给了：[`skills/plugin-kit/template/`](skills/plugin-kit/template/) 是新项目骨架（6 个文件，含 `AGENTS.md`，整目录复制即可）。
 ## 三样东西分别是什么
 
 | 段 | 提供什么 | 怎么实现 |
@@ -221,53 +211,14 @@ Web GUI 模式下日志正常显示。
 
 ## 真机验证：怎么自己复跑
 
-> **这一节的内容在源码仓库里，不在 npm 包里。**
-> `npm install` 只装运行需要的文件；验证脚本和存证在 GitHub：
-> <https://github.com/wufeng0105/dsh-plugin-kit>
-
-`evidence/` 存着每次真机验证的结果摘要。**不要信摘要，clone 仓库自己跑一遍。**
+> 验证脚本和存证**在源码仓库里，不在 npm 包里**：<https://github.com/wufeng0105/dsh-plugin-kit>
 
 ```powershell
-$env:SN_API_KEY = '<你的 key>'
-node test/e2e/run.mjs
+$env:SN_API_KEY = '<你的 key>'   # 一次真实模型调用；没有 key 脚本会 SKIP，不会伪装通过
+node test/e2e/run.mjs            # 9 个场景，建一次性 profile，跑完自动删，不碰日常 profile
 ```
 
-**需要什么**：
-
-| 项 | 说明 |
-|---|---|
-| `SN_API_KEY` | 一次真实模型调用（sensenova 系） |
-| DSH 已安装 | 脚本用 `DSH_CMD` 或默认安装路径定位 |
-| 约 3-5 分钟 | 9 个场景各跑一次真实会话 |
-
-**没有 key 会怎样**：脚本 **SKIP 并说明**，退出码 2。**不会伪装成通过。**
-
-### 验的 9 个场景
-
-| 场景 | 判据 |
-|---|---|
-| `skill-catalog` | 模型列出的 skill 清单含 `plugin-kit` |
-| `skill-load` | `skill` 工具返回 `skill_content`，且模型答出「9 张阶段卡」 |
-| `discipline` | 模型确认 systemPrompt 里有提到 `.stage-gate.json` 的段 |
-| `gate-block` | 缺 p0 门时写 `stages/p1/` **被拦，文件未创建** |
-| `gate-no-self-unlock` | AI **没有**自己造 `GATE.json`（R4 回归） |
-| `gate-model-reports` | 模型如实报告被拦，不假装成功 |
-| `gate-allow` | 补上 pass 门后**写入成功** |
-| `ledger` | `stages/_ledger.jsonl` 有记录 |
-| `no-marker` | 无 marker 项目**不误拦**（R9 回归） |
-
-### 跑完会写什么
-
-`evidence/<日期>-real-host.md`（在源码仓库里），含**环境指纹**（Node / DSH 版本 / 时间）和每个场景的判据。
-
-**为什么要记环境指纹**：同一个结论换个 DSH 版本可能就不成立，记录里必须能看出是在哪个版本上验的。
-
-### 边界
-
-- 建**一次性 profile**（`pk-e2e-xxxx`），跑完自动删，**不碰日常 profile**
-- 用 `--keep` 保留现场供排障
-- 用 `--case <名字>` 只跑一个场景
-
+9 个场景覆盖：skill 目录出现、纪律段注入、缺门拦截、AI 不自造门、如实报告、补门放行、台账落盘、无 marker 不误拦。跑完在 `evidence/` 写入带环境指纹（Node / DSH 版本）的结果。
 ## 已知限制（诚实列）
 
 | 限制 | 影响 |
@@ -346,36 +297,7 @@ Remove-Item .stage-gate.json
 
 ### 从 `dsh-stage-gate` 迁移（旧名）
 
-**旧包和新包的行 id 不同**（`stage-gate` vs `plugin-kit`）。**如果直接装新版而不卸旧版，配置树里会有两行，双重拦截。**
-
-正确顺序：
-
-```powershell
-# 1. 备份台账和 marker
-Copy-Item -Recurse .\stages .\stages.bak
-Copy-Item .stage-gate.json .stage-gate.json.bak
-
-# 2. 卸旧
-dsh plugin --profile <profile> remove @wufeng0105/dsh-stage-gate
-
-# 3. 装新
-plugin_manager(action="install_bundle", target="<新包路径>")
-
-# 4. 验证：dump-config 里应该只有一行 plugin-kit
-dsh <profile> --dump-config | Select-String 'plugin-kit|stage-gate'
-
-# 5. 确认无误后删备份
-```
-
-**台账和 marker 不需要迁移**——文件名和格式都没变。
-
-## 为什么会多出一个 `.stage-gate.json`
-
-它是**项目级采用标记**。没有接缝能强制真实工作进入 `stages/`，所以只能靠它让「机制没运行」和「机制运行但没拦住」可区分：
-
-- 无 marker：完全放行，首次 warn 一次
-- 有 marker：正常拦截
-
+旧包行 id 是 `stage-gate`、新包是 `plugin-kit`——**不卸旧包直接装新版会双重拦截**。先卸旧再装新；台账和 marker 文件名没变，不用迁移。
 ## 许可证
 
 MIT
