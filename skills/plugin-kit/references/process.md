@@ -235,6 +235,28 @@ Remove-Item -Recurse (Join-Path $env:DSH_HOME "profiles\smoke")
 
 **不要为了拿到 L1 去启动第二个 GUI 实例干扰用户正在用的界面**——那是用验证成本换验证结论，本末倒置。
 
+**模块形态条款（2026-11-10 崩溃事故）**：界面型插件的 `client.js` 不是 ESM 模块——宿主把**所有插件的 client.js 拼成一个大脚本**加载。含 `export`/`import` 会让整个拼接脚本 `SyntaxError: Unexpected token 'export'`，**web boot 失败、整个 DSH 起不来**。
+
+正确形态（picker / dshmarket / draft-studio 一致）：
+
+```js
+window.__ModuleLoader__.load({
+  id: '<包名>',
+  factory: (require) => {
+    const plugin = { inject, apply /* , 纯逻辑 */ };
+    Object.defineProperty(plugin, Symbol.toStringTag, { value: 'Module' });
+    return plugin;
+  },
+});
+```
+
+P2 出口判据必须加两条：
+
+- **断言 client.js 无 ESM 语法、有 `window.__ModuleLoader__.load` 注册**；
+- **模拟宿主拼接大脚本 `new Function(combined)` parse 成功**——单文件 `node --check` 是合法 ESM，测不出这个错。
+
+离线测试全绿 ≠ 宿主能加载：`node import()` 会把 ESM 当合法模块加载，DOM 桩直接 import 具名导出也全绿，**没有一条在验证宿主会怎么加载这个文件**。
+
 **出口**：
 
 - 每条需要 L1 的验收，要么通过并标 L1，要么写明"无法在运行时验证 + 原因 + 谁接受"；

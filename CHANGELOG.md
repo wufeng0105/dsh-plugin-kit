@@ -57,10 +57,6 @@
 
 **新发现的失败模式**：独立审查员两次中途失败且无报告，暴露「审查员不可得时的降级复核协议」缺位。本次临时做法（作者复核 + 显式标注「无独立审查」+ 收紧放行判定）应固化。
 
-## [0.1.0] - 2026-11-09
-
-首个版本。合并了原 `plugin-kit`（skill）与 `dsh-stage-gate`（插件）。
-
 ### 补记：用户负向证据（2026-11-10 12:27）
 
 E 阶段收官后用户说「设置页没看到」——**第 9 起缺陷，也是唯一一起由真实用户撞上、流程内部没抓到的**。
@@ -70,6 +66,26 @@ E 阶段收官后用户说「设置页没看到」——**第 9 起缺陷，也�
 `references/limits.md` L1 同步：160 → **172 分钟**、55.6% → **59.7%**、8 起 → **9 起**、返工 36.9% → 41.3%。
 
 **这条证据的分量**：COST-VERDICT 初版把完成标志 1 写成「部分」、结论偏乐观；用户撞上等于给那个乐观打了补丁。「UI 未做 L1 验证」不是免责声明，它真会让缺陷流到用户面前。
+
+### 崩溃事故：web boot 失败（2026-11-10 12:38）
+
+用户刷新后 **DSH 整个起不来**。日志 `crash-2026-11-10T04-38-14-952Z-web-boot.log`：
+`Error: web boot: 1 entry did not activate / @wufeng0105/dsh-archive-manager: import failed`，
+renderer console：`Uncaught SyntaxError: Unexpected token 'export'`。
+
+根因：`client.js` 用了 ESM `export`，而宿主把所有插件 client.js **拼成一个大脚本**加载 → 整个脚本 parse 失败。对照四个正常插件，client.js 一个 export 都没有，硬契约是 `window.__ModuleLoader__.load({id, factory})`。
+
+**21 条离线测试全绿却没抓到**——所有测试都在验「代码逻辑对不对」，没有一条验「宿主会怎么加载这个文件」。
+
+修法：client.js 重写为 ModuleLoader 形态；测试加 `load-client.mjs` 适配层；新增 `module-shape.test.mjs`（C5，模拟拼接脚本 parse，专项变异证明会红）；测试面 18→21。
+
+`process.md` P3.5 卡新增**模块形态条款**；`limits.md` L1 终值 184 分钟 / 63.9% / 10 起。
+
+用户已用其他 IDE 彻底移除插件，DSH 恢复。**修复后的源码不要再装回日常 profile**，除非先过 C5 + 一次性 profile 真机启动验证。
+
+## [0.1.0] - 2026-11-09
+
+首个版本。合并了原 `plugin-kit`（skill）与 `dsh-stage-gate`（插件）。
 
 ### 新增
 
