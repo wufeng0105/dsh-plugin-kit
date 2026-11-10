@@ -28,13 +28,24 @@
 
 **收益侧**：流程拦下 **12 起**会流到用户面前的问题（销毁语义写进确认框、幽灵引用、网关名排实施期、GOAL 自身过期、状态绑定错位三连环、inject 未声明、自造槽名、L1 等级标宽、**`slots.register` 被塞进 `inject` 回调导致设置页不渲染**）。
 
-**第 9、12 起来自用户**：E 阶段收官后用户先说「设置页没看到」，修复后刷新又说「DSH 起不来」——先查出插件根本没装进日常 profile（P3.5 的一次性 profile 拆掉了），补装后仍看不到，才查出注册形态错误。**第 12 起更重**：`client.js` 用了 ESM `export`，宿主把所有 client.js 拼成大脚本加载 → `SyntaxError: Unexpected token 'export'` → web boot 失败，用户被迫用其他 IDE 移除插件才恢复。**21 条离线测试全绿却没抓到**，因为没有一条验证「宿主会怎么加载这个文件」。第 12 起：装进日常完整插件集后 `1 entry did not activate`，**隔离最小 profile 复现不出来**（bundle 组合差异），且日志无堆栈。新增 C5 护栏（模拟拼接脚本 parse，专项变异证明会红）。**第 12 起**：修复后按「建→装→启动」正确顺序验，宿主启动时又报 `Config = {}` 不是 schemastery Schema → `1 entry did not activate`；删掉 Config 导出后 **web boot 零 warning、零崩溃日志**，client bundle 清单含本插件（L1）。完整见 `COST-VERDICT.md §九`。
+**第 9–12 起都来自用户，不是审查员**。这四起是本次实验最重要的发现：
+
+| # | 用户看到的现象 | 真正的根因 | 为什么内部没抓到 |
+|---|---|---|---|
+| 9 | 设置页没有条目 | 插件只在 P3.5 的一次性 profile 里，日常 profile 从未装过 | 拆 profile 是流程要求的动作，但没人复核「装到哪去了」 |
+| 10 | 补装后仍空白 | `slots.register` 被塞进 `slots.inject` 回调（inject 是门控不是注册入口） | 离线 DOM 桩测的是逻辑，不是宿主注册契约 |
+| 11 | DSH 起不来 | `client.js` 用 ESM `export`，宿主把所有 client.js 拼成大脚本 → `SyntaxError` | 单文件 `node --check` 是合法 ESM；无一条测试验「宿主怎么加载」 |
+| 12 | 修复后仍起不来 | ① 只装最小 profile 测不出完整插件集冲突 ② `Config = {}` 不是 schemastery Schema | ① 验证环境与真实环境 bundle 数不同 ② 同样属于「宿主加载契约」盲区 |
+
+**新增的三条护栏**：C4（注册必须在 inject 之外）、C5（模拟宿主拼接脚本 parse）、C6（Config 必须是 Schema）。
+
+**现有状态**：插件在**最小配置下启动干净**（零 warning、零崩溃日志、L1）；但**完整插件集下曾崩溃，至今未拿到堆栈**，界面是否真的渲染**仍未验证**。项目已停止，结论见 `dsh-archive-manager/stages/COST-VERDICT.md`。
 
 完整数据：`dsh-archive-manager/stages/COST-VERDICT.md`。
 
 ### 为什么只算「部分关闭」
 
-字面判定是 172 < 288 → 机制成立。**但我不接受这个字面结论**，三个理由：
+字面判定是 204 < 288 → 机制成立。**但我不接受这个字面结论**，三个理由：
 
 1. **工期 960 分钟是凭空估的**，按「熟练后」估，而 E 阶段是第一次走完整流程，含大量学习成本。分母被人为抬高。
 2. **项目没交付完**：UI 未做 L1 验证、插件没真正发布。分子分母都会变。**而且第 12 起缺陷正是「UI 未验」流到用户面前的实证。**
