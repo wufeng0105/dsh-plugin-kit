@@ -1,0 +1,6 @@
+# 本项目的插件行。id 与 name 必须与 package.json 一致——
+# 漏改 name 会让这一行指向不存在的包，插件装不上。
+- insert:
+    - id: my-plugin
+      name: '@local/my-plugin'
+      config: {}

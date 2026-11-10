@@ -45,7 +45,7 @@
 | 5 | `references/evidence.md` | 172 | **产品**（九条边界） | 改写 |
 | 6 | `references/limits.md` | 128 | **产品**（两条未关边界） | 与 evidence 合并候选 |
 | 7 | `references/walkthrough.md` | 104 | **产品**（真实打回片段） | 保留 |
-| 8 | `assets/AGENTS.template.md` | 47 | **产品**（模板） | 不动 |
+| 8 | `assets/AGENTS.template.md` | 47 | **产品**（模板） | 已于 2026-11-11 移入 `template/AGENTS.md`（骨架的一部分） |
 | 9 | `README.md`（包根） | 377 | 给安装者的说明 | **拆分**（见 §三） |
 | 10 | `skills/plugin-kit/README.md` | 87 | **与 #9 重叠** | **合并进 #9 或删** |
 | 11 | `CHANGELOG.md` | 270 | 版本史 | 不动（不可删） |
@@ -263,7 +263,7 @@
 | references/evidence.md | **可靠性**：这套东西凭什么可信 | 「我该信它到什么程度？」 |
 | references/limits.md | **边界**：它还不行的地方 | 「哪些事它做不到？」 |
 | references/walkthrough.md | **示例**：一次真实打回长什么样 | 「打回具体是什么样？」 |
-| assets/AGENTS.template.md | **可复制产物** | （不是读物，是模板） |
+| template/AGENTS.md | **可复制产物** | （不是读物，是骨架的一部分） |
 
 **主题冲突检测**（已核实）：
 

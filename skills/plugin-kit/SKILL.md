@@ -102,6 +102,40 @@ P0 需求 → P1 计划 → P1.5 探针门 → P2 执行 → P3 验证 → P3b �
 > **现在 `plugin-kit` 本身就以插件形态提供**（`@wufeng0105/dsh-plugin-kit`），它把这个 skill 一起打包注册。
 > 想只要判据、不要强制力，仍可单独复制本目录使用。
 
+## 新建一个插件项目
+
+**不要从零手写。** 有一个现成的骨架，复制过去即可：`template/`
+
+```
+template/
+├── package.json          ← 含 dsh.bundle.patch，宿主才认它是插件
+├── cordis.patch.yml      ← 插入 profile 的那一行
+├── index.js              ← Host 半骨架，inject 为空
+├── AGENTS.md             ← 给下一个 AI 的项目说明
+├── .stage-gate.json      ← 存在即启用阶段门（不想启用就删掉它）
+└── stages/p0/.gitkeep    ← 让空目录能被 git 记住
+```
+
+> **骨架里没有 `.gitignore`。** 不是漏了——npm 打包时**总会排除** `.gitignore`，
+> 放一份会让「仓库里的骨架」和「包里的骨架」不一致（2026-11-11 实测踩到）。
+> 需要的项目自己建一份。
+
+**三步**：
+
+1. **把 `template/` 里的内容（含隐藏文件）复制到项目根目录**
+2. **把占位符 `my-plugin` 全部替换成本项目名**（短横线小写）：
+
+   | 文件 | 改哪 |
+   |---|---|
+   | `package.json` | `name` → `@local/<项目名>` |
+   | `cordis.patch.yml` | `id` 和 `name` |
+   | `index.js` | `name` 常量 + 日志前缀 |
+
+   **改完搜一次 `my-plugin`，必须零残留。** 漏掉 `cordis.patch.yml` 的 `name` 会让那一行指向不存在的包，插件装不上。
+3. **装一次**（`install_bundle`，`target` 传项目绝对路径），读返回的 `application`——**骨架装得上，才算搭好了**。装完它什么都不做是正常的。
+
+**为什么用骨架而不是现写**：历史上最频繁的失败是「文件都建了，装不上」——`package.json` 少个字段、`inject` 写错一个名字，都在装的那一刻才暴露。骨架把这些固化成文件，漏不了。
+
 ## 按需读什么
 
 **阅读顺序就是下表顺序。** 每一份只讲一个主题，读完再决定要不要读下一份。
@@ -163,7 +197,8 @@ P0 需求 → P1 计划 → P1.5 探针门 → P2 执行 → P3 验证 → P3b �
 
 | 文件 | 用途 |
 |---|---|
-| [`assets/AGENTS.template.md`](assets/AGENTS.template.md) | 复制到项目根并改名 `AGENTS.md`，让五条短规则每次运行都注入 |
+| [`template/`](template/) | **整目录复制到新项目根**——项目骨架，见上文「新建一个插件项目」 |
+| [`template/AGENTS.md`](template/AGENTS.md) | 只想给已有项目加一份项目说明时，单独复制这一个 |
 | [`assets/touchpoints.sample.json`](assets/touchpoints.sample.json) | 触点清单样例，抄结构 |
 | [`assets/host-snapshot.sample.json`](assets/host-snapshot.sample.json) | 宿主探测快照样例，抄结构 |
 

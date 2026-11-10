@@ -25,7 +25,10 @@
 | 做成 skill | 按描述匹配加载 | 长内容、按需读 | 匹配不上就不出现 |
 | **做成插件**（本包） | 宿主级强制拦截 | 需要「不用记」 | 要改目录结构、要放 marker |
 
-本包提供的是第三种，**并且把第一种的模板一起给了**：[`skills/plugin-kit/assets/AGENTS.template.md`](skills/plugin-kit/assets/AGENTS.template.md)。
+本包提供的是第三种，**并且把第一种的模板和一份完整的项目骨架一起给了**：
+
+- [`skills/plugin-kit/template/`](skills/plugin-kit/template/) —— 新项目的骨架，整目录复制过去即可（7 个文件，见 SKILL.md「新建一个插件项目」）
+- [`skills/plugin-kit/template/AGENTS.md`](skills/plugin-kit/template/AGENTS.md) —— 只想给已有项目加一份项目说明时，单独复制这一个
 
 ## 三样东西分别是什么
 

@@ -379,14 +379,30 @@ claim('M3', 'CHANGELOG 声称的测试总数必须与实际一致', () => {
   const smoke = countTests('test/smoke.mjs');
   // 2026-11-10 新增：打包守卫。它也在 npm run packed 里跑，属于测试面的一部分。
   const packed = countTests('test/packed.mjs');
+  // 2026-11-11 新增：骨架自洽守卫。
+  const template = countTests('test/template.mjs');
   const claimsSrc = readFileSync(join(ROOT, 'test', 'readme-claims.mjs'), 'utf8');
   const claims = (claimsSrc.match(/^claim\(|^await claimAsync\(/gm) ?? []).length;
   const failures = (readFileSync(join(ROOT, 'test', 'failure-signals.mjs'), 'utf8').match(/check\(|checkAsync\(/gm) ?? []).length;
-  const actual = kernel + smoke + packed + claims + failures + 6;
+
+  // 变异数改成从脚本里数，不再写死。写死过一次：后来加了新变异，这里还是 +6，
+  // 于是 M3 报「CHANGELOG 写 196，实际 211」——断言在正确报警，但它自己数错了。
+  //
+  // 两个脚本的记录形态不同，各用各的模式：
+  //   mutate.mjs      —— MUTATIONS 数组，每个变异是 `    '名字',`
+  //   mutate-pack.mjs —— results.push({ name: '名字', ... })
+  const countMutations = () => {
+    const a = (readFileSync(join(ROOT, 'test', 'mutate.mjs'), 'utf8').match(/^\s{4}'[^']+',$/gm) ?? []).length;
+    const b = (readFileSync(join(ROOT, 'test', 'mutate-pack.mjs'), 'utf8').match(/^\s{4}name: /gm) ?? []).length;
+    return a + b;
+  };
+  const mutations = countMutations();
+
+  const actual = kernel + smoke + packed + template + claims + failures + mutations;
 
   assert(
     Number(m[1]) === actual,
-    'CHANGELOG 写 ' + m[1] + ' 项，实际 ' + actual + ' 项（内核' + kernel + '+冒烟' + smoke + '+打包' + packed + '+断言' + claims + '+失败' + failures + '+变异6）',
+    'CHANGELOG 写 ' + m[1] + ' 项，实际 ' + actual + ' 项（内核' + kernel + '+冒烟' + smoke + '+打包' + packed + '+骨架' + template + '+断言' + claims + '+失败' + failures + '+变异' + mutations + '）',
   );
   return actual + ' 项一致';
 });

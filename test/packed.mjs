@@ -26,7 +26,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execSync } from 'node:child_process';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -74,12 +74,50 @@ test('打包守卫：skills/ 整个目录必须进包（判据不在包外）', 
     'skills/plugin-kit/references/reviewer.md',
     'skills/plugin-kit/references/evidence.md',
     'skills/plugin-kit/references/walkthrough.md',
-    'skills/plugin-kit/assets/AGENTS.template.md',
     'skills/plugin-kit/assets/touchpoints.sample.json',
     'skills/plugin-kit/assets/host-snapshot.sample.json',
     'skills/plugin-kit/scripts/recheck.mjs',
   ]) {
     assert.ok(files.has(required), `包内缺 ${required}——SKILL.md 提到它，用户装完却是死链`);
+  }
+});
+
+test('打包守卫：项目骨架 template/ 的每个文件都必须进包', () => {
+  const { files } = packed();
+  const prefix = 'skills/plugin-kit/template/';
+
+  // 判据不是「列表里的都在」，而是「工作区里有的一律都在」。
+  // 后者能自动抓住新增文件被 npm 悄悄排除的情况——2026-11-11 就抓到一次：
+  // 模板里放了 `.gitignore`，工作区有，但 npm 总会排除 `.gitignore`，
+  // 于是「仓库里的模板」和「包里的模板」不一致，而所有断言都是绿的。
+  const tplDir = join(ROOT, 'skills/plugin-kit/template');
+  const onDisk = [];
+  (function walk(dir, rel) {
+    for (const ent of readdirSync(dir, { withFileTypes: true })) {
+      const r = rel ? `${rel}/${ent.name}` : ent.name;
+      if (ent.isDirectory()) walk(join(dir, ent.name), r);
+      else onDisk.push(`${prefix}${r}`);
+    }
+  })(tplDir, '');
+
+  assert.ok(onDisk.length > 0, '骨架是空目录');
+  const missing = onDisk.filter((p) => !files.has(p));
+  assert.deepEqual(
+    missing,
+    [],
+    `这些文件在工作区有、但没进包（npm 会排除 .gitignore 等）：${JSON.stringify(missing)}`,
+  );
+
+  // 关键文件逐个点名，防「整个目录被移走但恰好还剩一个文件」蒙过上面那条。
+  for (const required of [
+    `${prefix}package.json`,
+    `${prefix}cordis.patch.yml`,
+    `${prefix}index.js`,
+    `${prefix}AGENTS.md`,
+    `${prefix}.stage-gate.json`,
+    `${prefix}stages/p0/.gitkeep`,
+  ]) {
+    assert.ok(files.has(required), `骨架缺 ${required}——复制出来的项目不完整`);
   }
 });
 
@@ -134,8 +172,12 @@ test('打包守卫：判据里的相对链接，指向的文件必须在 tarball
   assert.ok(hrefs.length > 0, 'SKILL.md 里一个相对链接都没有——解析器或文档出问题了');
 
   // 关键区别：判断依据是 **tarball 里有**，不是「工作区里有」。
+  // 目录链接（以 / 结尾）tarball 里没有条目，判据改成「该目录下至少有一个文件在包里」。
   const missing = hrefs.filter((href) => {
     const normalized = `${skillDirRel}/${href}`.replaceAll('\\', '/');
+    if (normalized.endsWith('/')) {
+      return ![...files].some((p) => p.startsWith(normalized));
+    }
     return !files.has(normalized);
   });
 

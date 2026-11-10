@@ -78,6 +78,51 @@ const results = [];
   });
 }
 
+// ---- 变异 4：骨架里改名一处、忘另一处 → template.mjs 必须红
+{
+  // 这是骨架最可能的坏法：有人改 package.json 的 name，忘了 cordis.patch.yml。
+  // 后果是那一行指向不存在的包，插件装不上——而 node --check 和 npm pack 都不报错。
+  const f = `${ROOT}/skills/plugin-kit/template/cordis.patch.yml`;
+  const orig = readFileSync(f, 'utf8');
+  const patched = orig.replace(
+    `name: '@local/my-plugin'`,
+    `name: '@local/some-other-name'`,
+  );
+  const changed = patched !== orig;
+  writeFileSync(f, patched, 'utf8');
+  const r = run('node --test test/template.mjs');
+  writeFileSync(f, orig, 'utf8');
+  results.push({
+    name: '骨架改名只改一半',
+    injected: changed,
+    red: !r.ok,
+    detail: changed ? (r.ok ? '仍绿 ← 空真' : '变红 ✓') : '注入失败',
+  });
+}
+
+// ---- 变异 5：骨架漏一个隐藏文件 → packed.mjs 必须红
+{
+  const victim = `${ROOT}/skills/plugin-kit/template/.stage-gate.json`;
+  const backup = `${victim}.mutbak`;
+  let moved = false;
+  if (existsSync(victim)) {
+    writeFileSync(backup, readFileSync(victim));
+    unlinkSync(victim);
+    moved = true;
+  }
+  const r = run('node --test test/packed.mjs');
+  if (moved) {
+    writeFileSync(victim, readFileSync(backup));
+    unlinkSync(backup);
+  }
+  results.push({
+    name: '骨架漏 .stage-gate.json',
+    injected: moved,
+    red: !r.ok,
+    detail: moved ? (r.ok ? '仍绿 ← 空真' : '变红 ✓') : '注入失败',
+  });
+}
+
 console.log('\n=== 变异结果 ===');
 let allRed = true;
 for (const r of results) {

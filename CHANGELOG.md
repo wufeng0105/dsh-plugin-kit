@@ -5,6 +5,56 @@
 
 ## [未发布]
 
+### 新增项目骨架 `template/`（2026-11-11）
+
+**问题**：新建一个 DSH 插件项目时，最容易失败的不是功能，是**骨架本身**——
+
+- `package.json` 少了 `dsh.bundle.patch` → 宿主不认它是插件，报 `declares no dsh.bundle`
+- `cordis.patch.yml` 的 `name` 与 `package.json` 的 `name` 不一致 → 那一行指向不存在的包
+- `inject` 猜了宿主没有的服务名 → 插件永远 `pending`，宿主当成 web boot 失败，**整个页面加载不出来**
+- 导出普通的 `Config = {}` → activate 崩在 `Cannot read properties of undefined (reading 'validate')`
+- 忘建 `.stage-gate.json` → 阶段门永远不启用，人却以为启用了
+
+这些都在「装的那一刻」才暴露，而且都不是靠 `node --check` 能发现的。
+
+**改动**：
+
+| 项 | 内容 |
+|---|---|
+| `skills/plugin-kit/template/` | **新增** 6 文件：`package.json` / `cordis.patch.yml` / `index.js` / `AGENTS.md` / `.stage-gate.json` / `stages/p0/.gitkeep` |
+| `skills/plugin-kit/SKILL.md` | **新增一节「新建一个插件项目」**：复制 → 改占位符 `my-plugin` → 装一次验证 |
+| `assets/AGENTS.template.md` | **删除**，内容并入 `template/AGENTS.md`——同一份内容两处会漂移 |
+| `test/template.mjs` | **新增** 9 条骨架自洽守卫 |
+| `test/packed.mjs` | 骨架文件进包断言改为「**工作区里有的，一律必须在包里**」 |
+| `test/mutate-pack.mjs` | 新增 2 个变异：只改一半名字 / 漏掉 marker |
+
+#### 实测踩到：npm 无法打包 `.gitignore`
+
+模板最初含 `.gitignore`（第 7 个文件）。`npm pack` 实测：**工作区有，包里没有**——npm 总会排除 `.gitignore`。
+
+于是「仓库里的骨架」和「包里的骨架」不一致，而当时所有断言都是绿的。
+
+**处置**：模板里删掉它（骨架现在 6 个文件），并把打包守卫改成更硬的判据——
+
+> 不是「列表里的文件都在包里」，而是「**工作区里有的，一律必须在包里**」。
+
+后者能自动抓住这一整类问题，不用每次手动往列表里加。改完立刻在 `SKILL.md` 里写明「骨架里没有 `.gitignore`，不是漏了」。
+
+#### 为什么不做脚本或斜杠命令
+
+考虑过 `node scripts/init.mjs` 和 `/plugin-kit init`。结论是**骨架目录更好**：
+
+| | 骨架目录 | 脚本 |
+|---|---|---|
+| 实现成本 | 零代码 | 要写、要测、要变红证明 |
+| 能不能直接看 | ✅ 就是普通文件 | ❌ 藏在代码里 |
+| 加一个文件 | 直接放进去 | 改代码 |
+| 漂移风险 | 低（文件是唯一源） | 高（代码 vs 文档两份） |
+
+斜杠命令额外有两个缺点：handler 只能返回 `{kind:'success'|'error', text}`（**不能让 AI 接着干**），而且要占一个全局命令名。
+
+脚本唯一更强的地方是自动替换项目名——但那只是 5 处文本，而且「搜占位符零残留」能立刻验证。
+
 ### 内置宿主 skill 解成可 grep 的普通文件 + 包内自足（2026-11-10）
 
 **问题**：宿主自带的 4 个 skill 埋在 203MB 的 `app.asar` 里。`ls` / `cat` / `grep` / `glob` **全都打不开**——只有 `read` 单文件能进，且必须预先知道路径。
@@ -203,20 +253,20 @@ Error: web boot: 1 entry did not activate
 - 启动四行自检：版本 + cwd、skill 注册、纪律段、拦截配置
 - 结构化字段白名单：`stage` / `code` / `path` / `tool`
 
-**测试（196 项）**
+**测试（211 项）**
 
 - 内核单测 90
 - 接线冒烟 43（含日志规范 6 条）
-- **打包守卫 5**（`test/packed.mjs`：按 `npm pack` 真实文件表判定，不看工作区）
+- **打包守卫 6**（`test/packed.mjs`：按 `npm pack` 真实文件表判定，不看工作区）
+- **骨架自洽守卫 9**（`test/template.mjs`：占位符三处一致、`Config` 形状、语法、marker、`AGENTS.md` 指路）
 - README 断言核对 38
 - 失败信号验证 14
-- 变异证明 6（`test/mutate.mjs`）
+- 变异证明 11（`test/mutate.mjs` 6 + `test/mutate-pack.mjs` 5）
 
-**另有 9 项变异 + 18 项包外实测，不计入上面这 196 项**
+**另有 18 项包外实测，不计入上面这 211 项**
 
-- `test/mutate-pack.mjs`：3 条新守卫的变红证明（删 `resourceBase` / 删 host-skills 内层文件 / SKILL.md 链到包外）
 - `test/selfcontained.mjs`：真打 tgz → 解到包外 → 18 项断言。判据齐全、Host 半可 import、`readSkill` 报的 base 下真能读到 `host-skills/VERSION.json`
-- 这两项不进内核计数：前者本身是变红证明（与 `mutate.mjs` 同类），后者需要整个 tarball（离线单测拿不到）
+- 不进计数是因为它需要整个 tarball，离线单测拿不到
 
 ### 修复
 
