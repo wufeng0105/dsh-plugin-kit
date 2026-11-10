@@ -20,6 +20,7 @@
 同一套判据有三种执行方式：写进 `AGENTS.md`（短规则、每次注入）、做成 skill（长文按需加载）、**做成插件**（本包，宿主级强制）。
 
 本包是第三种，并把前两种的载体一起给了：[`skills/plugin-kit/template/`](skills/plugin-kit/template/) 是新项目骨架（6 个文件，含 `AGENTS.md`，整目录复制即可）。
+
 ## 三样东西分别是什么
 
 | 段 | 提供什么 | 怎么实现 |
@@ -219,6 +220,7 @@ node test/e2e/run.mjs            # 9 个场景，建一次性 profile，跑完�
 ```
 
 9 个场景覆盖：skill 目录出现、纪律段注入、缺门拦截、AI 不自造门、如实报告、补门放行、台账落盘、无 marker 不误拦。跑完在 `evidence/` 写入带环境指纹（Node / DSH 版本）的结果。
+
 ## 已知限制（诚实列）
 
 | 限制 | 影响 |
@@ -298,6 +300,7 @@ Remove-Item .stage-gate.json
 ### 从 `dsh-stage-gate` 迁移（旧名）
 
 旧包行 id 是 `stage-gate`、新包是 `plugin-kit`——**不卸旧包直接装新版会双重拦截**。先卸旧再装新；台账和 marker 文件名没变，不用迁移。
+
 ## 许可证
 
 MIT
