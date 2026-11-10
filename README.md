@@ -125,7 +125,7 @@ skill 目录里出现 plugin-kit
 
 | 形态 | 装什么 | 得到什么 |
 |---|---|---|
-| **纯判据** | 复制 `.dsh/skills/plugin-kit/` | 只有 skill，无强制力 |
+| **纯判据** | 复制 `skills/plugin-kit/` 到项目的 `.dsh/skills/` 或 `~/.dsh/skills/` | 只有 skill，无强制力 |
 | **完整** | 装本包 | 判据 + 纪律 + 强制力 |
 | **观察** | 装本包 + `mode: observe` | 判据 + 纪律 + 日志 |
 
@@ -139,14 +139,45 @@ dsh-plugin-kit/
 ├── lib/
 │   ├── gate.js              判定内核（纯函数，38 条测试）
 │   ├── ledger.js            台账（13 条测试）
-│   ├── skill-provider.js    skill 注册（37 条测试）
+│   ├── skill-provider.js    skill 注册（39 条测试）
 │   └── discipline.js        常驻纪律文本
-├── skills/plugin-kit/       判据（构建产物，权威源在 .dsh/skills/plugin-kit/）
-├── vendor/                  schemastery 与 Config
-└── test/                    133 条
+├── skills/plugin-kit/       判据（唯一源）
+│   ├── SKILL.md
+│   ├── references/          6 份判据正文
+│   ├── assets/              可复制模板
+│   ├── scripts/             recheck.mjs
+│   └── host-skills/         宿主自带 4 个 skill 的普通文件副本
+├── vendor/
+│   ├── config.js            Config（schemastery Schema）
+│   └── schemastery.mjs      判定用的 Schema 实现
+└── test/                    196 条（90 内核 + 5 打包 + 43 冒烟 + 38 断言 + 14 失败信号 + 6 变异）
 ```
 
-**双树一致性**：`.dsh/skills/plugin-kit/` 是权威源，`skills/plugin-kit/` 是构建产物。测试里有哈希断言，改了一边忘另一边会立刻变红。
+**自足**：这个包被单独下载、装进任何 profile 都能完整工作。判据、资产、宿主文档副本全在包内，**不依赖任何外部目录**。
+
+> 2026-11-10 之前这里还有一棵 `.dsh/skills/plugin-kit/`（本地开发现场），靠「双树一致性」测试守着。**那棵树已删除**——它让发布物隐含依赖一个别人不会创建的目录。那条测试改写成更有意义的问法：**「SKILL.md 里提到的每个文件都必须真的在包里」**。
+
+### `skills/plugin-kit/host-skills/`：为什么宿主文档要在这里存一份
+
+宿主自带 4 个 skill（`cordis-plugin-development`、`cordis-composition-reference`、`editing-cordis-compositions`、`agent-experience`），讲的是**「宿主的 API 怎么用」**——和本包的**判据**互补。
+
+**但它们的原文在 203MB 的 `app.asar` 里**：`ls` / `cat` / `grep` / `glob` 全都打不开，只有 `read` 单文件能进，且必须**预先知道路径**。
+
+实测代价：一次真实插件开发里，为回答「宿主有没有删除会话的 API」「Client 怎么让 Host 执行操作」，花了 22 次 `cordis_inspect_query`（同一份 catalog 查了 14 次）、55 次 `grep`、71 次 `read`——**大部分时间在跟「东西打不开」搏斗**。
+
+解成普通文件后：
+
+
+| | `app.asar` 里 | `host-skills/` |
+|---|---|---|
+| `grep` | ❌ 打不开 | ✅ |
+| `glob` | ❌ | ✅ |
+| 要不要先知道路径 | **要** | 不要 |
+| 一次能扫多少 | 一个文件 | 整目录 |
+
+**版本**：`host-skills/VERSION.json` 记了来源版本。`app.asar` 的修改时间比它新，就说明副本可能过期了，重新解一次即可——不做自动检测，因为读旧文档不是坏东西。
+
+**这 4 份不会被注册成插件 skill**：`skill-provider` 只扫 `skills/` 的直接子目录，`vendor/` 不在范围。它们只是普通文档。
 
 ## 日志
 

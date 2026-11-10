@@ -1,9 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readdirSync, readFileSync, existsSync } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, dirname, resolve } from 'node:path';
+import { join, dirname, resolve, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -283,45 +282,52 @@ test('打包的 plugin-kit 正文可读且非空', async () => {
   assert.ok(r.content.length > 500, `正文应足够长，实际 ${r.content.length} 字符`);
 });
 
-// ---------------------------------------------------------------- 双树一致性（审计 C3b）
+// ---------------------------------------------------------------- 包内自足（原「双树一致性」，2026-11-10 改写）
 
-/** 递归列出目录下所有文件的相对路径 + sha256。 */
-function hashTree(root) {
-  const out = new Map();
-  const walk = (dir, prefix) => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      if (entry.name === 'node_modules' || entry.name === '.git') continue;
-      const rel = prefix === '' ? entry.name : `${prefix}/${entry.name}`;
-      const abs = join(dir, entry.name);
-      if (entry.isDirectory()) walk(abs, rel);
-      else if (entry.isFile()) out.set(rel, createHash('sha256').update(readFileSync(abs)).digest('hex'));
-    }
-  };
-  walk(root, '');
-  return out;
-}
+test('skill 自足：包内 skills/plugin-kit 的引用文件全部存在', () => {
+  // 2026-11-10 变更：原先这条守的是「包内 = .dsh/skills/plugin-kit 的双树一致性」。
+  // 那个约束已取消——`.dsh/skills/plugin-kit` 当初只是本地开发现场，
+  // 现在源只有一处：包内 skills/plugin-kit/。
+  //
+  // 但「双树一致性」原本守的东西仍然要守，换成了更本质的问法：
+  // **这个包被单独安装时，SKILL.md 里提到的每个文件都必须真的在包里。**
+  // 否则用户装完点开 skill，一半链接是死的——而测试全绿。
 
-test('双树一致性：包内 skills/plugin-kit 与 .dsh/skills/plugin-kit 哈希相等', () => {
-  // 审计 C3 (方案 A)：.dsh/skills/plugin-kit 是权威源，包内是构建产物。
-  // 漂移必须让测试变红，而不是靠人记得同步。
-  const authoritative = resolve(PACKAGE_ROOT, '..', '.dsh', 'skills', 'plugin-kit');
-  if (!existsSync(authoritative)) {
-    // 权威源不在（比如这个包被单独下载）。
-    // 铁律「空真排除」：不能用 assert.ok(true) 恒真通过——那等于这条测试从没跑过。
-    // 正确做法是显式跳过（node:test 的 skip），跳过会出现在测试报告里，不是伪装成通过。
-    t.skip(`权威源不存在，无法比对：${authoritative}`);
-    return;
+  const skillDir = join(PACKAGED_SKILLS, 'plugin-kit');
+  const skillMd = readFileSync(join(skillDir, 'SKILL.md'), 'utf8');
+
+  // 抓 SKILL.md 里所有 markdown 相对链接：](path)
+  const links = [...skillMd.matchAll(/\]\(([^)#][^)]*)\)/g)]
+    .map((m) => m[1])
+    .filter((href) => !/^[a-z]+:/i.test(href)); // 排除 http: / https:
+
+  assert.ok(links.length > 0, 'SKILL.md 里一个相对链接都没有——解析器或文档出问题了');
+
+  const missing = [];
+  for (const href of links) {
+    const target = resolve(skillDir, href);
+    if (!existsSync(target)) missing.push(href);
   }
-  const packaged = hashTree(join(PACKAGED_SKILLS, 'plugin-kit'));
-  const source = hashTree(authoritative);
+  assert.deepEqual(missing, [], `SKILL.md 引用了包里不存在的文件：${JSON.stringify(missing)}`);
 
-  const onlyInSource = [...source.keys()].filter((k) => !packaged.has(k));
-  const onlyInPackage = [...packaged.keys()].filter((k) => !source.has(k));
-  const differing = [...source.keys()].filter((k) => packaged.has(k) && packaged.get(k) !== source.get(k));
-
-  assert.deepEqual(onlyInSource, [], `权威源有但包里没有：${JSON.stringify(onlyInSource)}`);
-  assert.deepEqual(onlyInPackage, [], `包里有但权威源没有：${JSON.stringify(onlyInPackage)}`);
-  assert.deepEqual(differing, [], `内容不一致：${JSON.stringify(differing)}`);
+  // host-skills 是 2026-11-10 新增的宿主文档副本，必须在包里且可读。
+  const hostSkills = join(skillDir, 'host-skills');
+  assert.ok(existsSync(hostSkills), 'host-skills/ 不在包内——宿主文档副本丢了');
+  assert.ok(
+    existsSync(join(hostSkills, 'VERSION.json')),
+    'host-skills/VERSION.json 缺失，无法判断副本是否过期',
+  );
+  for (const name of [
+    'cordis-plugin-development',
+    'cordis-composition-reference',
+    'editing-cordis-compositions',
+    'agent-experience',
+  ]) {
+    assert.ok(
+      existsSync(join(hostSkills, name, 'SKILL.md')),
+      `host-skills/${name}/SKILL.md 缺失`,
+    );
+  }
 });
 
 // ---------------------------------------------------------------- SkillDefinition 完整性（真机踩过的 bug）
@@ -385,4 +391,65 @@ test('isValidDefinition: invocation 字段非 boolean 被拒', () => {
     content: 'x', invocation: { modelInvocable: 'yes', userInvocable: true },
   };
   assert.equal(isValidDefinition(bad, 'plugin-kit'), false);
+});
+
+// ---------------------------------------------------------------- resourceBase（2026-11-10 实测缺口）
+//
+// 宿主 `dsh-skill/lib/index.js` 的 renderResourceHint 分两支：
+//   有 resourceBase(kind:'directory') → 注入「Base directory for this skill: <绝对路径>」
+//                                       +「相对路径按这个 base 解析」
+//   没有                              → 只说「Resources for this skill are managed by provider X」
+//
+// 而宿主渲染用的是 **readSkill** 的返回值（不是 listSkills 的）。
+// 2026-11-10 之前 readSkill 没给这个字段，模型拿到 SKILL.md 正文却不知道
+// references/、host-skills/ 在哪——只能猜，或去翻打不开的 app.asar。
+//
+// 这条测试钉住它，否则下次静默消失（独立审计实证：删掉那一行，全部测试仍绿）。
+
+test('readSkill: 必须带 resourceBase（否则模型不知道文件在哪）', async () => {
+  const root = makeSkillsDir({ 'demo': '---\nname: demo\ndescription: a demo\n---\nBODY' });
+  try {
+    const def = await readSkill({ root, provider: 'plugin-kit', locator: { directory: 'demo' } });
+    assert.ok(def !== undefined, '应返回定义');
+
+    assert.ok('resourceBase' in def, 'readSkill 必须返回 resourceBase——缺了宿主不会告诉模型 base directory');
+    assert.equal(def.resourceBase.kind, 'directory', 'kind 必须是 directory（宿主 switch 的第一支）');
+    assert.equal(typeof def.resourceBase.path, 'string', 'path 必须是 string');
+    assert.ok(def.resourceBase.path.length > 0, 'path 不能为空');
+
+    // 关键：必须是**绝对路径**，且指向这个 skill 自己的目录。
+    // 宿主会把它原样注入「Base directory for this skill: <path>」，
+    // 模型据此解析 SKILL.md 里的 host-skills/、references/。
+    assert.ok(
+      isAbsolute(def.resourceBase.path),
+      `path 必须是绝对路径，实际是 ${def.resourceBase.path}`,
+    );
+    assert.equal(
+      resolve(def.resourceBase.path),
+      resolve(join(root, 'demo')),
+      'path 必须指向 root/<directory>，否则相对链接解析到错的地方',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('readSkill: resourceBase 与 listSkills 报的是同一个目录', async () => {
+  // 两条路径都描述同一个 skill，报的 base 必须一致。
+  // 不一致会让「按 listSkills 看到的」和「按 readSkill 解析的」落到不同目录。
+  const root = makeSkillsDir({ 'demo': '---\nname: demo\ndescription: a demo\n---\nBODY' });
+  try {
+    const listed = await listSkills({ root, provider: 'plugin-kit' });
+    const def = await readSkill({ root, provider: 'plugin-kit', locator: { directory: 'demo' } });
+    assert.equal(listed.length, 1);
+    assert.ok(def !== undefined);
+
+    assert.equal(
+      resolve(listed[0].resourceBase.path),
+      resolve(def.resourceBase.path),
+      'listSkills 与 readSkill 报的 base directory 必须一致',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

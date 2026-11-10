@@ -5,6 +5,59 @@
 
 ## [未发布]
 
+### 内置宿主 skill 解成可 grep 的普通文件 + 包内自足（2026-11-10）
+
+**问题**：宿主自带的 4 个 skill 埋在 203MB 的 `app.asar` 里。`ls` / `cat` / `grep` / `glob` **全都打不开**——只有 `read` 单文件能进，且必须预先知道路径。
+
+**实测代价**：一次真实插件开发中，为回答「宿主有没有删除会话的 API」「Client 怎么让 Host 执行操作」，花了 22 次 `cordis_inspect_query`（同一份 catalog 查了 14 次）、55 次 `grep`、71 次 `read`、51 次 `glob`，三条候选路全试错。
+
+**改动**：
+
+| 项 | 内容 |
+|---|---|
+| `skills/plugin-kit/host-skills/` | **新增** 33 文件（4 个 skill 的普通文件副本，来源 `app.asar`，DSH `0.2.2-rc.1`） |
+| `skills/plugin-kit/host-skills/VERSION.json` | 版本戳：`dsh` / `extractedAt` / `source` 三字段 |
+| `skills/plugin-kit/host-skills/README.md` | 说明：这是什么、与 `plugin-kit` 的分工、过期怎么重解 |
+| `SKILL.md` | **新增一节「宿主领域知识在哪」**：指向表 + 三条查不出答案时的顺序 |
+| `lib/skill-provider.js` | **`readSkill` 补上 `resourceBase`** —— 见下 |
+| `.dsh/`（整棵目录） | **删除** —— 见下 |
+
+#### `readSkill` 补 `resourceBase`：一条缺失让 AI 不知道文件在哪
+
+宿主 `dsh-skill/lib/index.js:71-79` 的 `renderResourceHint` 分两支：
+
+| `resourceBase` | 宿主注入到 `<skill_resources>` 的内容 |
+|---|---|
+| 有（`kind:'directory'`） | 「Base directory for this skill: **绝对路径**」+「相对路径按这个 base 解析」 |
+| **没有** | 只说「Resources for this skill are managed by provider X」——**不给路径** |
+
+`listSkills` 一直有 `resourceBase`，**`readSkill` 一直没有**。而宿主渲染用的是 `readSkill` 那份。
+
+**后果**：AI 拿到 SKILL.md 正文，却不知道 `references/`、`host-skills/` 在哪——只能猜，或去翻 `app.asar`（打不开）。上面那 200+ 次工具调用，根因之一就是这一行缺失。
+
+补上后宿主会自动报绝对路径，**与当前工作目录无关**——AI 不用再猜。
+
+#### 删除 `.dsh/`：让发布物真正自足
+
+之前 `DshBundle\.dsh\skills\plugin-kit\` 是「权威源」，包内 `skills/plugin-kit/` 是「构建产物」，靠一条**双树一致性**测试守着哈希相等。
+
+**这隐含一个错误前提**：发布到 GitHub 给别人用时，对方也得先创建 `.dsh/skills/plugin-kit/` 才能跑测试。
+
+**已删除**。判据现在只有一处源：`skills/plugin-kit/`。
+
+**那条测试改写成更有意义的问法**：**「SKILL.md 里提到的每个相对链接，都必须真的在包里」**——包括新增的 `host-skills/` 四个 skill 和 `VERSION.json`。这守的是「用户装完点开 skill，链接不是死的」，比「两棵树哈希相等」更接近真实失效方式。
+
+删除前已用 `git bundle` 保全那棵树里的独立提交历史（`evidence/skills-v1-history.bundle`，34.7KB，不进 npm 包）。
+
+**为什么要单独说「三条顺序」**：那次开发翻遍 catalog 和源码 200 多次都没答案，最后是读 `dshmarket` 的 `lib/routes.js` 才找到 `webServer.register({path, handler})`。**「找一个真实运行的同类插件」是最有效的一招，但最容易被忘掉。**
+
+**明确不做**：
+
+- 不做自动过期检测（读旧文档不是坏东西，人看一眼就能判断）
+- 不把这 4 份注册成插件 skill（`skill-provider` 只扫 `skills/` 直接子目录；`host-skills/` 是 `plugin-kit/` 的子目录，不会被扫到）
+
+**`package.json` 的 `files` 无需改动**——`vendor` 和 `skills` 早已在白名单里。
+
 ### 并入 process-lab 的规格正文（2026-11-09）
 
 原 `dsh-plugin-process-lab` 仓库归档，内容按「三向合并」并入本仓。
@@ -150,13 +203,20 @@ Error: web boot: 1 entry did not activate
 - 启动四行自检：版本 + cwd、skill 注册、纪律段、拦截配置
 - 结构化字段白名单：`stage` / `code` / `path` / `tool`
 
-**测试（189 项）**
+**测试（196 项）**
 
-- 内核单测 88
+- 内核单测 90
 - 接线冒烟 43（含日志规范 6 条）
+- **打包守卫 5**（`test/packed.mjs`：按 `npm pack` 真实文件表判定，不看工作区）
 - README 断言核对 38
 - 失败信号验证 14
-- 变异证明 6
+- 变异证明 6（`test/mutate.mjs`）
+
+**另有 9 项变异 + 18 项包外实测，不计入上面这 196 项**
+
+- `test/mutate-pack.mjs`：3 条新守卫的变红证明（删 `resourceBase` / 删 host-skills 内层文件 / SKILL.md 链到包外）
+- `test/selfcontained.mjs`：真打 tgz → 解到包外 → 18 项断言。判据齐全、Host 半可 import、`readSkill` 报的 base 下真能读到 `host-skills/VERSION.json`
+- 这两项不进内核计数：前者本身是变红证明（与 `mutate.mjs` 同类），后者需要整个 tarball（离线单测拿不到）
 
 ### 修复
 

@@ -23,8 +23,8 @@ import { PACKAGED_SKILL_RANK, DESCRIPTION_LIMIT, listSkills } from '../lib/skill
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..');
 
-/** 权威源 skill 目录：包内 skills/ 是它的构建产物，双树一致性由测试守门。 */
-const SKILL_DIR = resolve(ROOT, '..', '.dsh', 'skills', 'plugin-kit');
+/** 判据目录：包内 skills/plugin-kit/ 是唯一源（2026-11-10 起，不再有 .dsh 那棵）。 */
+const SKILL_DIR = resolve(ROOT, 'skills', 'plugin-kit');
 
 const results = [];
 function claim(id, text, fn) {
@@ -377,14 +377,16 @@ claim('M3', 'CHANGELOG 声称的测试总数必须与实际一致', () => {
   const countTests = (file) => ((readFileSync(join(ROOT, file), 'utf8').match(/^test\(/gm) ?? []).length);
   const kernel = countTests('test/gate.test.mjs') + countTests('test/ledger.test.mjs') + countTests('test/skill-provider.test.mjs');
   const smoke = countTests('test/smoke.mjs');
+  // 2026-11-10 新增：打包守卫。它也在 npm run packed 里跑，属于测试面的一部分。
+  const packed = countTests('test/packed.mjs');
   const claimsSrc = readFileSync(join(ROOT, 'test', 'readme-claims.mjs'), 'utf8');
   const claims = (claimsSrc.match(/^claim\(|^await claimAsync\(/gm) ?? []).length;
   const failures = (readFileSync(join(ROOT, 'test', 'failure-signals.mjs'), 'utf8').match(/check\(|checkAsync\(/gm) ?? []).length;
-  const actual = kernel + smoke + claims + failures + 6;
+  const actual = kernel + smoke + packed + claims + failures + 6;
 
   assert(
     Number(m[1]) === actual,
-    'CHANGELOG 写 ' + m[1] + ' 项，实际 ' + actual + ' 项（内核' + kernel + '+冒烟' + smoke + '+断言' + claims + '+失败' + failures + '+变异6）',
+    'CHANGELOG 写 ' + m[1] + ' 项，实际 ' + actual + ' 项（内核' + kernel + '+冒烟' + smoke + '+打包' + packed + '+断言' + claims + '+失败' + failures + '+变异6）',
   );
   return actual + ' 项一致';
 });

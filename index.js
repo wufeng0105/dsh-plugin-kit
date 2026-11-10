@@ -5,7 +5,7 @@
  *   - 本文件只做「宿主接缝的接线」和「I/O」
  *   - 判定逻辑全在 lib/gate.js（纯函数，可完整单测）
  *
- * 用到的接缝（见 process-lab/INTERFACE-FACTS.md）：
+ * 用到的接缝（出处：process-lab 归档仓的 INTERFACE-FACTS.md，本仓不含）：
  *   H1  tools/pre-execute  waterfall，拦截
  *   H10 tools/result        emit，落账
  *   H18 ctx.fs              读 GATE.json
@@ -313,7 +313,7 @@ export function apply(ctx, config = {}) {
   /**
    * H1：拦截。
    *
-   * 注意三点（INTERFACE-FACTS 的时序坑）：
+   * 注意三点（实测时序坑，出处同上）：
    *   1. waterfall —— 不拥有决策时必须 return next()
    *   2. 异步门必须观察 exec.signal
    *   3. 全局注册（非 agent-scoped），否则子代理的调用收不到
