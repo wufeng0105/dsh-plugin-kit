@@ -257,6 +257,22 @@ P2 出口判据必须加两条：
 
 离线测试全绿 ≠ 宿主能加载：`node import()` 会把 ESM 当合法模块加载，DOM 桩直接 import 具名导出也全绿，**没有一条在验证宿主会怎么加载这个文件**。
 
+**Host 半形态条款（2026-11-10 第二个崩溃点）**：`index.js` 的 `Config` **不是普通对象**。cordis 要求它是 schemastery Schema（有 `.validate()`）。写 `export const Config = {}` 会让插件 activate 直接失败：
+
+```
+warning: 1 entry did not activate
+TypeError: Cannot read properties of undefined (reading 'validate')  at resolveConfig
+```
+
+**不需要用户可调配置时，正确做法是根本不导出 `Config`**（对照 `@wufeng0105/dsh-enhance`）。需要配置时才用 `Schema.object({...})`。
+
+P2 出口判据再加两条断言：
+
+- `Config` 若存在，`typeof Config.validate === 'function'` 且 `Config({})` 不抛；
+- `index.js` 必须导出 `name` / `inject` / `apply` 三件套。
+
+**为什么离线测不出**：`node --check` 与 `node import()` 都只看语法和模块合法性；这两条错都发生在**宿主加载与激活阶段**，只有真机启动会暴露。
+
 **出口**：
 
 - 每条需要 L1 的验收，要么通过并标 L1，要么写明"无法在运行时验证 + 原因 + 谁接受"；

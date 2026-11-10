@@ -83,6 +83,24 @@ renderer console：`Uncaught SyntaxError: Unexpected token 'export'`。
 
 用户已用其他 IDE 彻底移除插件，DSH 恢复。**修复后的源码不要再装回日常 profile**，除非先过 C5 + 一次性 profile 真机启动验证。
 
+### 第二个崩溃点：Config 不是 schemastery Schema（2026-11-10 13:0x）
+
+按「建 profile → 装 → **启动 GUI** → 看设置页」正确顺序真机验证时，宿主启动报：
+
+```
+warning: 1 entry did not activate
+archive-manager: TypeError: Cannot read properties of undefined (reading 'validate')  at resolveConfig
+```
+
+根因：`export const Config = {}` 是普通对象，cordis 要求 `Config` 是 schemastery Schema。
+**不需要配置就不该导出 Config**（对照 `dsh-enhance`）。
+
+修法：删掉 Config 导出。修后真机 **web boot 零 warning、零新崩溃日志**，boot 页 HTTP 200 且 client 清单含本插件（**首次拿到 L1**）。
+
+新增 **C6 护栏**（`host-shape.test.mjs`）+ process.md 的 **Host 半形态条款**。测试面 21→23。
+
+**两条宿主硬契约至此才完整**：client.js 用 ModuleLoader 形态（不能有 ESM）、index.js 的 Config 必须是 Schema 或不存在。
+
 ## [0.1.0] - 2026-11-09
 
 首个版本。合并了原 `plugin-kit`（skill）与 `dsh-stage-gate`（插件）。
