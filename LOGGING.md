@@ -7,19 +7,22 @@
 | 等级 | 什么该用 | 用户该做什么 | 频率 |
 |---|---|---|---|
 | **error** | 插件装上了但**坏了**（打包残、配置非法、内部异常） | **必须修**，否则插件无效 | 罕见 |
-| **warn** | 插件在工作，但**状态异常或需要你知道**（未采用项目、门被跳过、读盘失败、拦截被主动关掉） | **看一眼**，多半不用动 | 低频 |
-| **info** | **生命周期事件**（启动、禁用、启用） | 知道就行 | 启动时一次 |
+| **warn** | 插件在工作，但**状态异常或需要你知道**（未采用项目、门记录不可用、读盘失败、台账挂载异常） | **看一眼**，多半不用动 | 低频 |
+| **info** | **生命周期事件**（启动、禁用、启用、台账挂载结果） | 知道就行 | 启动时一次 |
 | **debug** | **每次调用的细节**（每条工具结果、台账补记） | 排查时才看 | 高频 |
 
 **判断口诀**：用户**必须**做什么 → `error`；**应该知道**什么 → `warn`；**一次性**状态 → `info`；**每次都发生** → `debug`。
+
+> **2026-11-11 措辞订正**：warn 一栏原先写「门被跳过」。那个行为已不存在——`skip` 不再是通行证，
+> 它是与「缺门 / 失败 / 格式坏」并列的四种原因之一（`cause: skip`）。
 
 ## 二、结构化字段（不改人读格式）
 
 `log()` 第二参数是可选 `fields`，**只在需要时用**，人读格式不变：
 
 ```js
-log('warn', '[plugin-kit] 门被跳过，本次写入放行但已留痕', {
-  stage: 'p0', code: 'GATE_SKIP', path: 'stages/p0/GATE.json',
+log('warn', '[plugin-kit][observe] 本可以拦住：GATE_UNVERIFIED — 上游自述未审查', {
+  stage: 'p0', code: 'GATE_UNVERIFIED', path: 'stages/p0/GATE.json',
 });
 ```
 
@@ -30,9 +33,14 @@ log('warn', '[plugin-kit] 门被跳过，本次写入放行但已留痕', {
 | 字段 | 什么时候带 | 取值 |
 |---|---|---|
 | `stage` | 涉及具体阶段 | `p0`…`p5` |
-| `code` | 有明确原因码 | `GATE_MISSING` / `GATE_FAILED` / `GATE_MALFORMED` / `UNKNOWN_WRITE_TOOL` / `GATE_SKIP` |
+| `code` | 有明确原因码 | `GATE_MISSING` / `GATE_FAILED` / `GATE_MALFORMED` / `GATE_UNVERIFIED` |
 | `path` | 涉及具体文件 | 相对项目根的路径 |
 | `tool` | 涉及工具调用 | 工具名 |
+
+> **旧的两个 code 都已不存在**（2026-11-11 两批改动）：
+> 「未知工具」那个理由码随「按工具身份判罪」整层删除；`skip` 的专属码则因为
+> `skip` 不再有单独的放行处置而合并进 `GATE_UNVERIFIED`。照旧名单找日志会一个都找不到。
+> 判据里已经写成断言（`npm run claims`）：任何文档里出现这两个词都会红。
 
 ## 三、`lib/` 层不调 logger
 
@@ -55,18 +63,28 @@ if (list.length === 0) {
 }
 ```
 
-## 四、启动自检四行
+## 四、启动自检四行 + 台账一行
 
 ```
 [plugin-kit] v<版本> 已加载 → cwd=<当前工作目录>
 [plugin-kit] skill provider 已注册 → name=plugin-kit root=<包内 skills 路径>
 [plugin-kit] 纪律段已挂载 → name=plugin-kit:discipline order=121
-[plugin-kit] 拦截已启用 → root=stages gateFile=GATE.json mode=enforce layout=9阶段 allowedTools=0
+[plugin-kit] 已启用 → root=stages gateFile=GATE.json mode=observe layout=9阶段
+[plugin-kit] 台账使用内存 + 文件镜像（无 storage）→ runId=<本次运行身份>
 ```
 
 **为什么要有版本号**：用户报问题时，第一句话应该是「你装的哪个版本」。
 
 **为什么要有 cwd**：`root` 是相对路径，不给 cwd 用户不知道它相对哪里。
+
+**为什么要有 `mode`**：`observe` 是默认值。用户看到的「没被拦」默认不是「门过了」，
+而是「台账只在记账」。不写出来，用户会以为机制坏了。
+
+**为什么要有 `runId`**：台账每一行都带它。它是「这条记录是哪一次运行写的」的唯一答案，
+也是判重的前提——没有它，两次运行的同一条事件在数据上无法区分。
+
+**为什么台账那行是 info 而不是 debug**：用户必须能确认「台账到底挂在 storage 上还是内存里」，
+否则「为什么重启后台账是空的」这个问题永远得靠猜。
 
 **有一条 `error` 就说明插件是残的**（比如打包漏了 `skills/`）。
 
@@ -124,5 +142,7 @@ headless 模式下 `ctx.logger` 的输出不进 stderr。**这是宿主行为，
 | 2 | `debug` 只放高频项 | 每条工具结果 / 台账补记 → debug |
 | 3 | 结构化字段只允许那四个 | grep 所有 `log(` 的第二参数 |
 | 4 | `lib/` 层零 logger 依赖 | grep `lib/*.js` 无 `logger` |
-| 5 | 启动四行齐全（含版本 + cwd） | 测试断言 |
-| 6 | README 明说 headless 限制 | 文档检查 |
+| 5 | 启动四行齐全（含版本 + cwd + mode） | 测试断言 |
+| 6 | 台账挂载结果必须留一行 info（含 storage 是否挂上 + runId） | 测试断言 `apply()` 后日志含「台账」 |
+| 7 | README 明说 headless 限制 | 文档检查 |
+| 8 | 文档里出现的每个 `code` 都必须是产品代码里真实存在的 | `npm run claims` 扫死引用 |

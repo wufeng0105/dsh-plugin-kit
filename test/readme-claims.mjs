@@ -508,6 +508,143 @@ claim('E2E6', 'evidence/ 和 test/e2e 必须**不**在 files 白名单里（证�
   return '都正确排除';
 });
 
+// ================================================================ WP6：N1 / N2 / N3
+//
+// 这一节守三件事：判据文件里有「用户可见面」、审查员有三条硬要求、文档不再撒谎。
+//
+// 为什么把文档断言放这里而不是单开文件：`npm run claims` 已经是「文档说的和代码做的一致」
+// 的唯一入口。文档撒谎与代码撒谎是同一类失败，判据该住在一起。
+
+// ---- N1：P0 出口必须含「用户可见面」
+
+claim('N1', 'P0 出口卡强制含「用户可见面」观察项', () => {
+  // 依据：`stages/p0/需求.md` 的 A1–A14 没有一条以「用户看到什么」为观察对象，
+  // 而四轮删除事故全在显示层（会话 seq 3002 / 4487 / 4698 / 4859）。
+  // 9 份审查报告里只有 1 份提到「未分组」，而那正是 bug 所在——审查员答的是被问的问题。
+  const process = readFileSync(join(SKILL_DIR, 'references', 'process.md'), 'utf8');
+  const p0 = process.slice(process.indexOf('### P0 需求'), process.indexOf('### P1 计划'));
+  assert(p0.length > 0, '找不到 P0 阶段卡——本断言的锚点失效了，先修锚点');
+  assert(/用户可见面/.test(p0), 'P0 出口卡里没有「用户可见面」这四个字');
+  assert(
+    /至少一条观察项以「操作 → 用户在宿主界面看到什么」为判定式/.test(p0),
+    'P0 出口卡没写清判定式的形状（必须是「操作 → 用户看到什么」，不是「计数对不对」）',
+  );
+  assert(
+    /缺此条，P0 不算过/.test(p0),
+    'P0 卡的这一条不是强制的——没有「缺此条，P0 不算过」，它就是建议而不是出口判据',
+  );
+  // 观察面必须点名，否则「用户看到什么」会被写成「界面上应该没问题」
+  assert(/会话列表|侧栏|按钮状态|重启后/.test(p0), '没要求写明观察面是哪一个界面');
+  return 'P0 卡含强制项 + 观察面 + 判定式形状';
+});
+
+// ---- N2：审查员三条硬要求
+
+claim('N2', 'reviewer.md 含三条新硬要求（不照抄判据 / 真宿主观察 / 用户可见面小节）', () => {
+  const reviewer = readFileSync(join(SKILL_DIR, 'references', 'reviewer.md'), 'utf8');
+  // ① 禁止只照抄实现者给的判定式
+  assert(/禁止只照抄实现者给的判定式/.test(reviewer), '缺「禁止只照抄判定式」这条');
+  assert(/必须自己从需求推导至少一条/.test(reviewer), '缺「自己从需求推导」的具体要求');
+  // ② 至少一条真宿主观察
+  assert(/至少一条真宿主观察/.test(reviewer), '缺「至少一条真宿主观察」这条');
+  assert(/%TEMP%/.test(reviewer), '没点明「不接受全程 %TEMP% 沙箱」——不点明就会被照旧执行');
+  // ③ 报告必须有「用户可见面」小节
+  assert(/报告必须有「用户可见面」小节/.test(reviewer), '缺「用户可见面小节」这条');
+  assert(/缺这一节 = 未完成审查/.test(reviewer), '缺该条时没有判定后果——不写后果就会被当成可选');
+  // 输出格式里也要有占位，否则审查员照模板写时会漏
+  const fmt = reviewer.slice(reviewer.indexOf('## 输出格式'));
+  assert(/用户可见面：/.test(fmt), '输出格式模板里没有「用户可见面」节——模板不带，报告就不会有');
+  // 任务书模板必须把三条传下去，否则新开的审查员读不到
+  const task = reviewer.slice(reviewer.indexOf('## 任务书模板'));
+  assert(/三条硬要求/.test(task), '任务书模板没带三条硬要求——复制出去的审查员不会知道');
+  return '三条要求 + 输出格式 + 任务书模板都到位';
+});
+
+// ---- N3 文档侧：不撒谎
+
+claim('N3:description', 'package.json 的 description 不含「强制力」，且写清了台账定位', () => {
+  const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+  const desc = String(pkg.description ?? '');
+  assert(desc.length > 0, 'description 为空');
+  assert(!desc.includes('强制力'), `description 还在声称「强制力」：${desc}`);
+  assert(!desc.includes('未过门拦截'), `description 还在声称「未过门拦截」：${desc}`);
+  assert(desc.includes('台账'), `description 没写台账——那是这个包现在唯一的产品能力：${desc}`);
+  return desc.slice(0, 60) + '…';
+});
+
+/** 扫一个文件里不许再出现的死引用（保留「已不存在」这类历史说明的方式：词不在文档里）。 */
+function assertNoDeadRefs(file, patterns) {
+  const text = readFileSync(join(ROOT, file), 'utf8');
+  const hits = [];
+  for (const [label, re] of Object.entries(patterns)) {
+    const n = (text.match(re) ?? []).length;
+    if (n > 0) hits.push(`${label}×${n}`);
+  }
+  assert(hits.length === 0, `${file} 仍有死引用：${hits.join(', ')}`);
+}
+
+claim('N3:README', 'README.md 无死引用（强制力 / allowedTools / GATE_SKIP）', () => {
+  // 2026-11-11 两批删改之后，这三个词在 README 里全是假的：
+  //   强制力 → 拦截层已删（WP4）；allowedTools → 配置项已删；
+  //   GATE_SKIP → 那个 code 已不存在（WP5 把 skip 并进 GATE_UNVERIFIED）。
+  // 数量以 brief 的实测表为准（5 / 3 / 0），这里断言的是「零残留」，比它更严。
+  assertNoDeadRefs('README.md', {
+    强制力: /强制力/g,
+    allowedTools: /allowedTools/g,
+    GATE_SKIP: /GATE_SKIP/g,
+  });
+  const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
+  // 反面：不能靠删干净变成「什么都不说」——台账定位必须还在
+  assert(readme.includes('台账'), 'README 把死引用删干净了，但也没说台账是什么');
+  return '三处死引用清零，台账定位仍在';
+});
+
+claim('N3:LOGGING', 'LOGGING.md 无死引用（GATE_SKIP / allowedTools / 强制力）', () => {
+  assertNoDeadRefs('LOGGING.md', {
+    GATE_SKIP: /GATE_SKIP/g,
+    allowedTools: /allowedTools/g,
+    强制力: /强制力/g,
+  });
+  return '三处死引用清零';
+});
+
+claim('N3:LOGGING-codes', 'LOGGING.md 列出的每个 code 都必须在产品代码里真实存在', () => {
+  // 这条是「文档承诺了做不到的事」的自动版：文档列一个不存在的 code，
+  // 用户按它去 grep 日志就会一个都找不到，然后以为插件没运行。
+  const logging = readFileSync(join(ROOT, 'LOGGING.md'), 'utf8');
+  const src = ['index.js', 'lib/gate.js', 'lib/ledger.js'].map((f) => readFileSync(join(ROOT, f), 'utf8')).join('\n');
+  const codes = new Set([...logging.matchAll(/`(GATE_[A-Z_]+)`/g)].map((m) => m[1]));
+  const missing = [...codes].filter((c) => !src.includes(c));
+  assert(codes.size > 0, 'LOGGING.md 里一个 code 都没列——锚点失效');
+  assert(missing.length === 0, `LOGGING.md 列了产品代码里不存在的 code：${missing.join(', ')}`);
+  return `${codes.size} 个 code 全部存在：${[...codes].join(' ')}`;
+});
+
+claim('N3:SKILL', 'SKILL.md 不再声称「门不必再人工开了 / 机械拦截」', () => {
+  // WP1 说这句是「有效部分与无效部分之间唯一的焊接点」。
+  // 现在是错的：默认 observe 不拦人，且 skip 也不再是通行证。
+  const skill = readFileSync(join(SKILL_DIR, 'SKILL.md'), 'utf8');
+  assert(!/门不必再人工开了/.test(skill), 'SKILL.md 仍在说「门不必再人工开了」——默认 observe 不拦人');
+  assert(!/机械拦截/.test(skill), 'SKILL.md 仍在说「机械拦截」——拦截层已删');
+  assert(!/强制力/.test(skill), 'SKILL.md 仍在提「强制力」');
+  // 反面：它必须说清插件那一半现在是什么，否则删完就变成「不提插件」了
+  assert(/台账/.test(skill), 'SKILL.md 没提台账——删掉旧定位后没给新定位');
+  return '旧定位已删，台账定位在';
+});
+
+claim('N3:ledger-attach', 'index.js 真的调用了 ledger.attach()（它曾是零调用的死代码）', () => {
+  // 依据：`lib/ledger.js:98` 定义 attach，`index.js` 调用 0 次 →
+  // createLedger 里的 unit 恒为 null，storage 分支永不执行，loadAll 一次没跑过。
+  const src = readFileSync(join(ROOT, 'index.js'), 'utf8');
+  const calls = (src.match(/ledger\s*\n?\s*\.attach\(|ledger\.attach\(/g) ?? []).length;
+  assert(calls >= 1, '`index.js` 里没有 `ledger.attach(` —— 台账又变回死代码了');
+  // attach 必须真的被 await/or 掉（有 .then 或 await），否则是「调用了但没人管结果」
+  assert(/\.attach\(\)[\s\S]{0,80}\.then\(|await\s+ledger\.attach\(\)/.test(src), 'attach() 的返回没人处理——挂载失败就静默了');
+  const ledgerSrc = readFileSync(join(ROOT, 'lib', 'ledger.js'), 'utf8');
+  assert(/runId/.test(ledgerSrc), 'ledger.js 里没有 runId——那每行就没有运行身份');
+  return `${calls} 处调用 + runId 在`;
+});
+
 // ================================================================ 汇总
 
 const failed = results.filter((r) => !r.ok);

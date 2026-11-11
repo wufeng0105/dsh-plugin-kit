@@ -2,7 +2,7 @@
   "name": "@wufeng0105/dsh-plugin-kit",
   "version": "0.1.0",
   "type": "module",
-  "description": "DSH 插件开发流程：同时提供判据（skill）、常驻纪律（systemPrompt 段）和强制力（未过门拦截）。装一个包，三样都有。",
+  "description": "DSH 插件开发流程：判据（skill）+ 常驻纪律（systemPrompt 段）+ 一条不拦路的台账（记录每个阶段做过什么、审查是谁在什么上下文里做的）。",
   "license": "MIT",
   "repository": {
     "type": "git",

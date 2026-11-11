@@ -265,6 +265,39 @@ export function apply(ctx, config = {}) {
   });
 
   /**
+   * 真挂一次 storage。**这是 WP6 修的那个洞：`attach()` 定义了，从来没被调用。**
+   *
+   * 后果不是「台账少了点东西」，是台账**从来没持久过**：`createLedger` 里 `unit`
+   * 恒为 null，所有 append 只落到内存 + 文件镜像，storage 分支永远不执行。
+   * 真实台账 `stages/_ledger.jsonl` 只有 14 行、5 组重复键，而同期发生了 59 次阶段写
+   * ——那 14 行是镜像写的，与 storage 无关；`attach()` 里的 `loadAll()` 一次没跑过，
+   * 所以**跨会话的历史从来没被读回来过**。
+   *
+   * 三条约定：
+   *
+   * 1. **不 await**。`apply()` 是同步入口，等一个 I/O 会拖住宿主启动；
+   *    而且 storage 挂不上是允许的（降级到内存 + 镜像），不该阻塞插件加载。
+   * 2. **失败走 `onWarn`**。`attach()` 内部已 catch 并回调；这里再兜一层 `.catch`，
+   *    防的是「不是 storage 打开失败，而是这行代码自己炸了」——那种情况一样不能静默。
+   * 3. **挂载完成要留一行 info**。用户得能确认「台账到底挂在 storage 上还是内存里」，
+   *    否则「为什么重启后台账是空的」这个问题永远得靠猜。
+   */
+  void ledger
+    .attach()
+    .then((mounted) => {
+      const count = ledger.all().length;
+      if (mounted) {
+        log('info', `[plugin-kit] 台账已挂载 storage → runId=${ledger.runId} 读回 ${count} 行历史`);
+      } else {
+        // 不是 error：没有 storage 也能工作（内存 + 文件镜像），只是不跨会话。
+        log('info', `[plugin-kit] 台账使用内存 + 文件镜像（无 storage）→ runId=${ledger.runId}`);
+      }
+    })
+    .catch((error) => {
+      log('warn', `[plugin-kit] 台账挂载异常，已降级为内存 + 文件镜像：${String(error?.message ?? error)}`);
+    });
+
+  /**
    * marker 缓存（C3）：按项目根缓存，避免每次读盘。
    *
    * ## 2026-11-11 修：**只缓存「已采用」，不缓存「未采用」**

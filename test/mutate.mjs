@@ -149,6 +149,42 @@ const MUTATIONS = [
     ['test/smoke.mjs'],
     'index.js',
   ],
+  // ================================================================ WP6 新增（两个必做）
+  [
+    // ★ 必做变异一：把 attach() 的调用删掉 ★
+    //
+    // 这是 WP6 / N3 的原始形态：`lib/ledger.js:98` 定义了 attach()，`index.js` 调用 0 次。
+    // 台账看起来在工作（文件镜像照写），但 `unit` 恒为 null，storage 分支永不执行，
+    // `loadAll()` 一次没跑过 —— **跨会话历史从来没被读回来过**。
+    //
+    // 这个变异要证明的是：`test/ledger.test.mjs` 的「apply 真的调用了 attach()」
+    // 不是摆设。它用会记账的假 storage 断言 open/loadAll 的次数，而不是 grep 源码——
+    // grep 只能证明「代码里有这个字符串」，证明不了「这行代码会被执行」。
+    //
+    // 注入点选 `void ledger` + `.attach()` 这两行整体（把调用换成 `Promise.resolve(false)`），
+    // 这样 `.then(...)` 链还完整、语法合法，唯一的差别就是 attach 不再被调用。
+    '删掉 attach() 调用（台账退回死代码）',
+    `  void ledger\n    .attach()\n`,
+    `  void Promise.resolve(false)// attach() 调用已删除\n`,
+    'full',
+    ['test/ledger.test.mjs'],
+    'index.js',
+  ],
+  [
+    // ★ 必做变异二：把去重键改回「两套口径」 ★
+    //
+    // 原始 bug：`append` 用 `stage|kind|at`，`has` 只比 `stage + kind`。
+    // `has` 永远比 `append` 宽，宽出来的部分全落在「被判重复」上——
+    // 同一阶段的门记录从 pass 改成 fail，`has` 仍说「记过了」，新结论永久丢失。
+    //
+    // 这个变异让 `has` 退回旧口径。必须让「has 与 append 用同一个去重键」变红。
+    'has() 退回旧口径（只比 stage+kind，比 append 宽）',
+    `    return rows.has(dedupeKey(runId, entry));`,
+    `    // 变异：退回旧口径——只比 stage + kind，不看 at\n    return [...rows.values()].some((row) => row.stage === entry.stage && row.kind === entry.kind);`,
+    'full',
+    ['test/ledger.test.mjs'],
+    'lib/ledger.js',
+  ],
 ];
 
 function runTests(dir, files, timeout = 120_000) {
@@ -192,10 +228,12 @@ function failingNames(out) {
 }
 
 function main() {
-  // 变异只施加到 lib/gate.js（前 9 个）或 index.js（接线那一个）。
-  // 按文件读一次原件，循环里按 `file` 取。
+  // 变异按 `file` 取原件。2026-11-11 WP6 加了 `lib/ledger.js`：
+  // 台账去重键那条洞在 ledger 里，只复读 gate/index 两个文件的话
+  // 注入点会失配 → SKIP → 被算作失败但显示成「环境问题」。
   const SOURCES = {
     'lib/gate.js': readFileSync(join(ROOT, 'lib', 'gate.js'), 'utf8'),
+    'lib/ledger.js': readFileSync(join(ROOT, 'lib', 'ledger.js'), 'utf8'),
     'index.js': readFileSync(join(ROOT, 'index.js'), 'utf8'),
   };
   console.log('变红证明：每个变异都必须让测试失败\n');
