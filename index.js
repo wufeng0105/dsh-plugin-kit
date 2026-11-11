@@ -447,20 +447,42 @@ export function apply(ctx, config = {}) {
       readGate: (stage) => gateCache.get(stage) ?? null,
     });
 
-    if (final.kind === 'skip-noted') {
-      log('warn', `[plugin-kit] ${final.stage} 的门被跳过（skip），本次写入放行但已留痕`, { stage: final.stage, code: 'GATE_SKIP' });
-      // C4：跳过门必须入账，否则 G3 形同虚设
-      ledger.append({ stage: final.stage, kind: 'skip', verdict: 'skip', baseDir });
-      return next();
-    }
+    // ---------------------------------------------------------------- 一处分流
+    //
+    // 2026-11-11 WP5 / T9：这里原先有**两条**路。
+    //
+    //   - 一条专给「上游 skip」：记 `kind:'skip'` → `return next()`
+    //     **那条就是那个洞**：`enforce` 下写 `{"verdict":"skip"}` 照样放行。
+    //   - 一条给 deny：按 mode 分流
+    //
+    // 现在内核把「缺门 / 门失败 / 门格式坏 / 门自述未审查」**全部**报成
+    // `kind:'deny'`（只是 `cause` 不同），所以这里只剩一条路，
+    // 而 `observe` 与 `enforce` 的差别也只剩这一个 if。
+    //
+    // 具体：skip 在 enforce 下也会走到 `toDecision`，**它再也拦得住了**。
     if (final.kind === 'deny') {
+      // 台账要能回答「这条为什么放行」。`detail` 由内核拼好（`skip p0 by=…`），
+      // `cause` 是它的机器可读版本。两者都只在台账里，不回流判定。
+      const entry = {
+        stage: final.hint?.upstream ?? null,
+        cause: final.cause ?? null,
+        detail: final.detail ?? null,
+        verdict: final.code,
+        // `by` 是门记录里的自述签发者：**只进台账，不进判据**（裁定书 §1.2，明确不做 T2）。
+        by: final.by ?? null,
+        baseDir,
+      };
+
       if (cfg.mode === 'observe') {
+        // observe：放行 + 记账。四种原因走同一句 append，不再各记各的 kind。
         log('warn', `[plugin-kit][observe] 本可以拦住：${final.code} — ${final.message}`, { code: final.code, stage: final.hint?.upstream });
-        // observe 模式也要入账：这是「本可以拦住 N 次」的数据来源
-        ledger.append({ stage: final.hint?.upstream ?? null, kind: 'would-block', verdict: final.code, baseDir });
+        // `would-block` 是「如果拦」的数据来源。skip 现在也归到这一类：
+        // 它不再是「正常放行」，而是一条「本可以拦住」。
+        ledger.append({ ...entry, kind: 'would-block' });
         return next();
       }
-      ledger.append({ stage: final.hint?.upstream ?? null, kind: 'blocked', verdict: final.code, baseDir });
+
+      ledger.append({ ...entry, kind: 'blocked' });
       return toDecision(final, log);
     }
     // final.kind === 'allow'：门过了，放行。

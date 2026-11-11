@@ -216,14 +216,43 @@ async function run() {
       check('9 个曾被误拦的只读工具全部放行', blocked.length === 0, blocked.join(', ') || '0 个被拦');
     }
 
-    // 场景 6：skip 门放行但留痕
+    // 场景 6：skip 门 —— enforce 下必须拦（2026-11-11 WP5 / T9 修的那个洞）
+    //
+    // 改之前这里是 `check('skip 门放行', decision.kind === 'allow', ...)`。
+    // 那断言的是 bug 本身：`skip` 的字面语义是「这一阶段没审」，却成了唯一被放行的
+    // verdict。现在 skip 与缺门/失败/格式坏走同一个出口，enforce 下一起拦。
     {
-      writeFileSync(join(ws, 'stages', 'p0', 'GATE.json'), '{"verdict":"skip","reason":"赶时间"}', 'utf8');
+      writeFileSync(join(ws, 'stages', 'p0', 'GATE.json'), '{"verdict":"skip","by":"user-authorized","reason":"赶时间"}', 'utf8');
       const { ctx, listeners, logs } = makeRealishCtx(ws);
       apply(ctx, { mode: 'enforce' });
       const { decision } = await firePreExecute(listeners, exec('write', { file_path: 'stages/p1/plan.md' }));
-      check('skip 门放行', decision.kind === 'allow', `decision=${decision.kind}`);
-      check('skip 留痕', logs.some((l) => l.includes('skip')), logs.join(' | ').slice(0, 80));
+      check(
+        'skip 门在 enforce 下被拦',
+        decision.kind === 'deny' && decision.info?.code === 'GATE_UNVERIFIED',
+        `decision=${decision.kind} code=${decision.info?.code}`,
+      );
+      check('skip 拦截留痕', logs.some((l) => l.includes('GATE_UNVERIFIED')), logs.join(' | ').slice(0, 100));
+      check('skip 的理由说明「未审查」', String(decision.reason).includes('未审查'), String(decision.reason).slice(0, 70));
+    }
+
+    // 场景 6b：同一个 skip 门，observe 下放行但入账 would-block
+    {
+      const { ctx, listeners } = makeRealishCtx(ws);
+      apply(ctx, { mode: 'observe' });
+      const { decision } = await firePreExecute(listeners, exec('write', { file_path: 'stages/p1/plan.md' }));
+      check('skip 门在 observe 下放行', decision.kind === 'allow', `decision=${decision.kind}`);
+      // 真 fs 上跑，台账镜像会落到 ws/stages/_ledger.jsonl
+      const ledgerPath = join(ws, 'stages', '_ledger.jsonl');
+      const rows = existsSync(ledgerPath)
+        ? readFileSync(ledgerPath, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l))
+        : [];
+      const wb = rows.filter((r) => r.kind === 'would-block');
+      check('skip 在 observe 下记 would-block', wb.length >= 1, `rows=${JSON.stringify(rows).slice(0, 160)}`);
+      check(
+        'skip 的台账 detail 能回答「为什么放行」',
+        wb.some((r) => r.detail === 'skip p0 by=user-authorized'),
+        `details=${JSON.stringify(wb.map((r) => r.detail))}`,
+      );
     }
 
     // 场景 7：fail 门阻断

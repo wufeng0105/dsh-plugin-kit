@@ -10,9 +10,11 @@ import {
   parseGate,
   prevStage,
   decide,
+  composeDetail,
   VERDICTS,
   DEFAULT_LAYOUT,
   REASONS,
+  CAUSES,
 } from '../lib/gate.js';
 
 const ROOT = 'stages';
@@ -235,14 +237,160 @@ test('decide: 上游 pass → 放行', () => {
   assert.deepEqual(r, { kind: 'allow' });
 });
 
-test('decide: 上游 skip → 放行但标记 skip-noted', () => {
+test('decide: cause 与 detail 前缀必须一致（防止两个字段各自漂移）', () => {
+  // WP5 报告说「有变异盯着 detail，但没有测试直接断言二者同形」。
+  // 这条补上：`detail` 的第一个词必须等于 `cause`。
+  // 为什么要锁：cause 是机器读的、detail 是人读的，人读的那份若与机器读的漂开，
+  // 台账就会出现「cause=skip 但 detail 写 missing」这种自相矛盾，
+  // 而事后排查全靠 detail 那一句。
+  const cases = [
+    ['missing', null],
+    ['malformed', 'not json'],
+    ['fail', JSON.stringify({ verdict: 'fail', by: 'human' })],
+    ['skip', JSON.stringify({ verdict: 'skip', by: 'user-authorized' })],
+  ];
+  for (const [expectedCause, gateRaw] of cases) {
+    const r = decide({
+      toolName: 'write',
+      args: { file_path: 'stages/p1/a.md', content: 'x' },
+      root: 'stages',
+      layout: ['p0', 'p1'],
+      readGate: () => gateRaw,
+      baseDir: 'C:/proj',
+    });
+    assert.equal(r.kind, 'deny', `${expectedCause} 应 deny`);
+    assert.equal(r.cause, expectedCause, `cause 应为 ${expectedCause}`);
+    const prefix = String(r.detail ?? '').split(' ')[0];
+    assert.equal(prefix, r.cause, `detail 前缀「${prefix}」必须等于 cause「${r.cause}」`);
+  }
+});
+
+test('decide: 上游 skip → deny GATE_UNVERIFIED（不再是通行证）', () => {
+  // 2026-11-11 WP5 / T9。这一条原先断言的是 `{ kind: 'skip-noted', stage: 'p0' }`，
+  // 也就是「放行」。那是整个产品最致命的洞：
+  //
+  //   `skip` 的字面语义是「这一阶段没审」，而它是**唯一被放行的 verdict**。
+  //   想跳过审查的人根本不需要伪造 `pass`——写 `skip` 就行，比写 `fail` 还省事
+  //   （`fail` 反而会 deny）。764 分钟真实开发里 3 次成功的门记录写入**全是 skip**。
+  //
+  // 现在 skip 与缺门/失败/格式坏走同一个出口：kind='deny'，只是 cause 不同。
+  // 处置交给上层按 mode 分流（见 smoke.mjs 的 observe/enforce 两条）。
   const r = decide({
     toolName: 'write',
     args: { file_path: 'stages/p1/plan.md' },
     root: ROOT,
     readGate: mkReader({ p0: '{"verdict":"skip"}' }),
   });
-  assert.deepEqual(r, { kind: 'skip-noted', stage: 'p0' });
+  assert.equal(r.kind, 'deny', `skip 必须 deny，实际 ${JSON.stringify(r)}`);
+  assert.equal(r.code, REASONS.GATE_UNVERIFIED);
+  assert.equal(r.cause, CAUSES.SKIP);
+});
+
+test('decide: 四种原因全部是 kind=deny（observe 才能用一条路分流）', () => {
+  // WP5 5.2 的内核前提：上层只按 mode 分流一次，所以内核必须把四种情况
+  // 报成**同一种 kind**。只要有一个漏成放行，observe 的 would-block 统计就会少一格，
+  // enforce 也就拦不住它——那正是 skip 原来的洞。
+  const cases = [
+    ['missing', () => null, REASONS.GATE_MISSING, CAUSES.MISSING],
+    ['fail', mkReader({ p0: '{"verdict":"fail"}' }), REASONS.GATE_FAILED, CAUSES.FAILED],
+    ['malformed', mkReader({ p0: '{oops' }), REASONS.GATE_MALFORMED, CAUSES.MALFORMED],
+    ['skip', mkReader({ p0: '{"verdict":"skip"}' }), REASONS.GATE_UNVERIFIED, CAUSES.SKIP],
+  ];
+  for (const [name, readGate, code, cause] of cases) {
+    const r = decide({ toolName: 'write', args: { file_path: 'stages/p1/plan.md' }, root: ROOT, readGate });
+    assert.equal(r.kind, 'deny', `${name} 应是 deny，实际 ${r.kind}`);
+    assert.equal(r.code, code, `${name} 的理由码不对`);
+    assert.equal(r.cause, cause, `${name} 的 cause 不对`);
+    assert.equal(r.hint.upstream, 'p0', `${name} 要带上是哪道门`);
+  }
+});
+
+test('decide: 不读 by —— by:"agent" 与 by:"human" 判定完全相同', () => {
+  // 裁定书 §1.2：`by` 是自述字段，伪造成本为零。本批**明确不做** T2（by 进判据）。
+  // `by` 只进台账（拼 detail 字符串），判定路径上一个分支都不许读它。
+  //
+  // 这一条锁住它：只换 by 的值，**判定结论必须逐字段相同**。
+  // 若哪天有人把 by 塞进判据，这里会立刻红。
+  for (const verdict of ['skip', 'pass', 'fail']) {
+    const run = (by) =>
+      decide({
+        toolName: 'write',
+        args: { file_path: 'stages/p1/plan.md' },
+        root: ROOT,
+        readGate: mkReader({ p0: JSON.stringify({ verdict, by }) }),
+      });
+    const agent = run('agent');
+    const human = run('human');
+
+    // 判定结论、理由码、原因三者必须一致——这些才是判据
+    assert.equal(agent.kind, human.kind, `verdict=${verdict}：by 改变了 kind`);
+    assert.equal(agent.code, human.code, `verdict=${verdict}：by 改变了理由码`);
+    assert.equal(agent.cause, human.cause, `verdict=${verdict}：by 改变了 cause`);
+
+    // 唯一允许带 by/detail 的是会进台账的那几种（deny）；
+    // allow 不进台账，所以它身上根本没有这两个字段。
+    if (agent.kind === 'deny') {
+      assert.equal(agent.by, 'agent');
+      assert.equal(human.by, 'human');
+    } else {
+      assert.equal(agent.by, undefined, `verdict=${verdict} 走 allow 时不该带 by`);
+      assert.equal(agent.detail, undefined, `verdict=${verdict} 走 allow 时不该带 detail`);
+    }
+  }
+
+  // 反面守卫：pass 无论 by 是什么都放行；skip 无论 by 是什么都拦。
+  // 这两句把「by 不可能是通行证」钉死。
+  const mkRun = (verdict, by) =>
+    decide({
+      toolName: 'write',
+      args: { file_path: 'stages/p1/plan.md' },
+      root: ROOT,
+      readGate: mkReader({ p0: JSON.stringify({ verdict, by }) }),
+    });
+  for (const by of ['agent', 'human', 'user-authorized', '']) {
+    assert.equal(mkRun('pass', by).kind, 'allow', `by=${by} 时 pass 应放行`);
+    assert.equal(mkRun('skip', by).kind, 'deny', `by=${by} 时 skip 必须仍然拦——by 不是通行证`);
+  }
+});
+
+test('decide: by 缺失时不崩，detail 落成 by=unknown', () => {
+  const r = decide({
+    toolName: 'write',
+    args: { file_path: 'stages/p1/plan.md' },
+    root: ROOT,
+    readGate: mkReader({ p0: '{"verdict":"skip"}' }),
+  });
+  assert.equal(r.kind, 'deny');
+  assert.equal(r.by, null, 'by 缺失应是 null，不是 undefined/空串');
+  assert.equal(r.detail, 'skip p0 by=unknown');
+});
+
+test('decide: detail 能区分四种原因（台账回答「为什么放行」的原料）', () => {
+  // WP5 4.5 条。依据：764 分钟会话里台账只有 allow 没有原因，
+  // 事后**没人能说出那次为什么放行**。四种情况在台账里必须一眼可分。
+  const detailOf = (readGate) =>
+    decide({ toolName: 'write', args: { file_path: 'stages/p1/plan.md' }, root: ROOT, readGate }).detail;
+
+  assert.equal(detailOf(() => null), 'missing p0');
+  assert.equal(detailOf(mkReader({ p0: '{"verdict":"fail"}' })), 'fail p0');
+  assert.equal(detailOf(mkReader({ p0: '{oops' })), 'malformed p0: not-json');
+  assert.equal(
+    detailOf(mkReader({ p0: '{"verdict":"skip","by":"user-authorized"}' })),
+    'skip p0 by=user-authorized',
+  );
+
+  // 四条互不相同 —— 这是「能区分」的机器判据，不是看格式像不像
+  const all = [
+    detailOf(() => null),
+    detailOf(mkReader({ p0: '{"verdict":"fail"}' })),
+    detailOf(mkReader({ p0: '{oops' })),
+    detailOf(mkReader({ p0: '{"verdict":"skip","by":"user-authorized"}' })),
+  ];
+  assert.equal(new Set(all).size, 4, `四条 detail 必须互不相同，实际 ${JSON.stringify(all)}`);
+
+  // malformed 的 why 要真的进 detail（不同的坏法给不同的 detail）
+  assert.equal(detailOf(mkReader({ p0: '{"stage":"p0"}' })), 'malformed p0: verdict-missing');
+  assert.equal(detailOf(mkReader({ p0: '{"verdict":"PASS"}' })), 'malformed p0: verdict-not-enum');
 });
 
 test('decide: 上游门格式坏 → deny GATE_MALFORMED（默认分支不宽容）', () => {

@@ -408,22 +408,126 @@ test('observe 模式：本可以拦住就入账一条 would-block（「如果拦
   assert.equal(wouldBlock[0].stage, 'p0', '应记下是哪道门本可以拦住');
 });
 
-// ---------------------------------------------------------------- skip 留痕
+// ---------------------------------------------------------------- skip 不再是通行证
 
-test('skip：上游门是 skip 时放行，并记 warn', async () => {
-  const ws = makeWorkspace(); // 必须有 marker，否则走到「未采用」分支，永远不会有 skip 日志
-  const { ctx, listeners, logger } = makeCtx({
+test('skip（enforce）：上游门是 skip 时被 deny —— 本批修的那个洞', async () => {
+  // ★ WP5 / T9 的核心断言 ★
+  //
+  // 改之前：`enforce` 下写 `{"verdict":"skip"}` 是**合法放行**。
+  // `skip` 的字面语义是「这一阶段没审」，而它是唯一被放行的 verdict ——
+  // 也就是说想跳过审查的人**不需要伪造 pass**，写 skip 就行，还比 fail 省事
+  // （fail 反而会 deny）。764 分钟真实开发里 3 次成功的门记录写入**全是 skip**。
+  //
+  // 这条测试现在必须绿：skip 在 enforce 下也要拦。
+  const ws = makeWorkspace();
+  const { ctx, listeners } = makeCtx({
     workspace: ws,
-    files: { 'stages/p0/GATE.json': '{"verdict":"skip","reason":"赶时间"}' },
+    files: { 'stages/p0/GATE.json': '{"verdict":"skip","by":"user-authorized","reason":"赶时间"}' },
   });
-  apply(ctx, {});
+  apply(ctx, { mode: 'enforce' });
+  const { decision, calledNext } = await firePreExecute(listeners, mkExec('write', { file_path: 'stages/p1/plan.md' }));
+
+  assert.equal(decision.kind, 'deny', `enforce 下 skip 必须拦，实际 ${JSON.stringify(decision)}`);
+  assert.equal(decision.info.code, 'GATE_UNVERIFIED');
+  assert.equal(calledNext, false, 'deny 时不调 next（由我们接管）');
+  // 理由要能读：说清「上一阶段自述未审查」
+  assert.ok(/未审查/.test(decision.reason), `理由应说明是「未审查」，实际：${decision.reason}`);
+});
+
+test('skip（observe）：放行但记 would-block，且 detail 说明为什么放行', async () => {
+  // 同一个项目、同一个门，只有 mode 不同 → 结果不同。
+  // observe 下它不再是「正常放行」，而是一条「本可以拦住」。
+  const ws = makeWorkspace();
+  const { ctx, listeners } = makeCtx({
+    workspace: ws,
+    files: { 'stages/p0/GATE.json': '{"verdict":"skip","by":"user-authorized"}' },
+  });
+  apply(ctx, { mode: 'observe' });
   const { decision } = await firePreExecute(listeners, mkExec('write', { file_path: 'stages/p1/plan.md' }));
-  assert.equal(decision.kind, 'allow');
-  const skipLog = logger.find((l) => l.message.includes('skip') || l.message.includes('跳过'));
-  assert.ok(skipLog !== undefined, `跳过必须留痕，实际日志：${JSON.stringify(logger.map((l) => l.message.slice(0, 40)))}`);
-  // 结构化字段：应带 stage 和 code
-  assert.equal(skipLog.fields?.stage, 'p0', '应带 stage 字段');
-  assert.equal(skipLog.fields?.code, 'GATE_SKIP', '应带 code 字段');
+  assert.equal(decision.kind, 'allow', 'observe 不该真的拦');
+
+  const rows = readFileSync(join(ws, 'stages', '_ledger.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  const wb = rows.filter((r) => r.kind === 'would-block');
+  assert.equal(wb.length, 1, `skip 应记一条 would-block，实际 ${JSON.stringify(rows)}`);
+  assert.equal(wb[0].cause, 'skip', 'cause 要说清是 skip 造成的');
+  assert.equal(wb[0].detail, 'skip p0 by=user-authorized', 'detail 要能回答「为什么放行」');
+  // by 只进台账，不进判据
+  assert.equal(wb[0].by, 'user-authorized', 'by 的值要落进台账');
+});
+
+test('skip 与缺门在台账里可区分（都记 would-block，但 cause/detail 不同）', async () => {
+  // 这正是 brief 让我自己判断的那个点：它们该不该是同一个 kind？
+  // 我选的是「同一个 kind（would-block）+ 不同的 cause」——
+  // 于是「本可以拦住几次」可以一句 count 数出来，而「为什么」仍然查得到。
+  const wsMissing = makeWorkspace();
+  const a = makeCtx({ workspace: wsMissing });
+  apply(a.ctx, { mode: 'observe' });
+  await firePreExecute(a.listeners, mkExec('write', { file_path: 'stages/p1/plan.md' }));
+
+  const wsSkip = makeWorkspace();
+  const b = makeCtx({ workspace: wsSkip, files: { 'stages/p0/GATE.json': '{"verdict":"skip","by":"me"}' } });
+  apply(b.ctx, { mode: 'observe' });
+  await firePreExecute(b.listeners, mkExec('write', { file_path: 'stages/p1/plan.md' }));
+
+  const rowsA = readFileSync(join(wsMissing, 'stages', '_ledger.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  const rowsB = readFileSync(join(wsSkip, 'stages', '_ledger.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+
+  const a0 = rowsA.find((r) => r.kind === 'would-block');
+  const b0 = rowsB.find((r) => r.kind === 'would-block');
+  assert.equal(a0.cause, 'missing', '缺门的 cause 是 missing');
+  assert.equal(b0.cause, 'skip', 'skip 的 cause 是 skip');
+  assert.equal(a0.detail, 'missing p0');
+  assert.equal(b0.detail, 'skip p0 by=me');
+  assert.notEqual(a0.detail, b0.detail, '两种原因必须可区分');
+  // 但 kind 相同 —— 「本可以拦住几次」能一句数出来
+  assert.equal(a0.kind, b0.kind, 'kind 应统一为 would-block');
+});
+
+// ---------------------------------------------------------------- observe 一处分流
+
+test('observe：四种原因全部走同一条路，各记一条 would-block', async () => {
+  // WP5 5.2：不再两套 kind。缺门 / 失败 / 格式坏 / 自述未审查
+  // 在 observe 下必须**全部**落成 would-block，一条都不能漏。
+  const cases = [
+    ['missing', null, 'missing p0'],
+    ['fail', '{"verdict":"fail"}', 'fail p0'],
+    ['malformed', '{oops', 'malformed p0: not-json'],
+    ['skip', '{"verdict":"skip","by":"x"}', 'skip p0 by=x'],
+  ];
+  for (const [label, gateRaw, wantDetail] of cases) {
+    const ws = makeWorkspace();
+    const files = gateRaw === null ? {} : { 'stages/p0/GATE.json': gateRaw };
+    const { ctx, listeners } = makeCtx({ workspace: ws, files });
+    apply(ctx, { mode: 'observe' });
+    const { decision } = await firePreExecute(listeners, mkExec('write', { file_path: 'stages/p1/plan.md' }));
+    assert.equal(decision.kind, 'allow', `${label}：observe 不该拦`);
+
+    const rows = readFileSync(join(ws, 'stages', '_ledger.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    const wb = rows.filter((r) => r.kind === 'would-block');
+    assert.equal(wb.length, 1, `${label}：应恰好一条 would-block，实际 ${JSON.stringify(rows)}`);
+    assert.equal(wb[0].detail, wantDetail, `${label}：detail 不对`);
+    assert.equal(wb[0].stage, 'p0', `${label}：应记下是哪道门`);
+  }
+});
+
+test('enforce：四种原因全部走同一条路，全是 deny', async () => {
+  // 上一条的镜像。两边合起来说明「处置只由 mode 决定」，
+  // 而 skip 和缺门在处置上没有区别 —— 这就是本批要的结果。
+  const cases = [
+    ['missing', null, 'GATE_MISSING'],
+    ['fail', '{"verdict":"fail"}', 'GATE_FAILED'],
+    ['malformed', '{oops', 'GATE_MALFORMED'],
+    ['skip', '{"verdict":"skip","by":"x"}', 'GATE_UNVERIFIED'],
+  ];
+  for (const [label, gateRaw, wantCode] of cases) {
+    const ws = makeWorkspace();
+    const files = gateRaw === null ? {} : { 'stages/p0/GATE.json': gateRaw };
+    const { ctx, listeners } = makeCtx({ workspace: ws, files });
+    apply(ctx, { mode: 'enforce' });
+    const { decision } = await firePreExecute(listeners, mkExec('write', { file_path: 'stages/p1/plan.md' }));
+    assert.equal(decision.kind, 'deny', `${label}：enforce 必须拦，实际 ${decision.kind}`);
+    assert.equal(decision.info.code, wantCode, `${label}：理由码不对`);
+  }
 });
 
 // ---------------------------------------------------------------- 自定义 layout
