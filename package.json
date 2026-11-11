@@ -44,10 +44,11 @@
     "template-e2e": "node test/template-e2e.mjs",
     "selfcontained": "node test/selfcontained.mjs",
     "smoke": "node --test test/smoke.mjs",
+    "instrument": "node --test test/instrument.test.mjs",
     "claims": "node test/readme-claims.mjs",
     "failures": "node test/failure-signals.mjs",
-    "mutate": "node test/mutate.mjs && node test/mutate-pack.mjs",
-    "check": "node --check index.js && node --check lib/gate.js && node --check lib/ledger.js && node --check lib/skill-provider.js && node --check lib/discipline.js && npm test && npm run packed && npm run template && npm run template-e2e && npm run selfcontained && npm run smoke && npm run claims && npm run failures && npm run mutate"
+    "mutate": "node test/mutate.mjs && node test/mutate-pack.mjs && node test/mutate-instrument.mjs",
+    "check": "node --check index.js && node --check lib/gate.js && node --check lib/ledger.js && node --check lib/skill-provider.js && node --check lib/discipline.js && npm test && npm run packed && npm run template && npm run template-e2e && npm run selfcontained && npm run smoke && npm run instrument && npm run claims && npm run failures && npm run mutate"
   },
   "dsh": {
     "bundle": {

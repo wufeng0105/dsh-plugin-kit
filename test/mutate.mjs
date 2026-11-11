@@ -51,9 +51,13 @@ const MUTATIONS = [
     `  // enum check removed`,
   ],
   [
+    // 这个变异测的是「扫描失效则 gate 不再拦 shell 写入」。
+    // 2026-11-11：原注入点写死了旧正则字面量，正则一改就 SKIP（注入点失配），
+    // 而 SKIP 不会被算作失败 —— 于是「有洞」被藏在一个看起来通过的输出里。
+    // 现在改成锚定**函数名与判定语句**，不锚定正则字面量：正则怎么改都不影响注入。
     'bash 文本扫描改成从不命中',
-    `  const writeIntent = /\\b(>|>>|tee|cp|mv|touch|mkdir|rm|sed\\s+-i|install|truncate|dd)\\b|>\\s*[^\\s|&]/;`,
-    `  const writeIntent = /NEVER_MATCH_ANYTHING_XYZ/;`,
+    `    if (writeIntent.test(t)) return { suspect: true, stage };`,
+    `    if (false && writeIntent.test(t)) return { suspect: true, stage };`,
   ],
 ];
 

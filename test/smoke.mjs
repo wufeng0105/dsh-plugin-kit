@@ -80,10 +80,27 @@ function makeCtx({ files = {}, logger = [], workspace = '/ws', adopted = true, m
       debug(payload) { logger.push(normalize(payload, 'debug')); },
     },
     fs: {
-      async resolve(p) {
-        return p in files ? { displayPath: p } : undefined;
+      // 2026-11-11：这个桩原先写成 `async resolve(p) { return p in files ? ... : undefined }`
+      // ——**没接收第二个参数 opts**。真实宿主是 `resolve(path, opts)`，相对路径按
+      // `opts.cwd ?? this.config.cwd` 解析。桩忽略 opts，于是「readGate 不传 cwd」这个
+      // 真机 bug（实测 6 次误报缺门）在测试里完全看不出来。
+      //
+      // 现在桩会像宿主一样工作：给了 cwd 就按 cwd 拼路径再去查 files；
+      // 没给 cwd 就退回一个与项目无关的进程级目录——**故意让不传 cwd 的调用查不到文件**，
+      // 这样漏传 cwd 会红。resolveCalls 供测试断言「cwd 到底传没传」。
+      resolveCalls: [],
+      async resolve(p, opts) {
+        ctx.fs.resolveCalls.push({ path: p, opts });
+        const base = opts?.cwd ?? 'STALE-PROCESS-CWD';
+        const rel = String(p).replaceAll('\\', '/').replace(/^\.\//, '');
+        const key = `${base}/${rel}`;
+        // 两种查法都试：原样（相对路径场景）与 cwd+path（宿主真实语义）
+        if (p in files) return { displayPath: p };
+        if (key in files) return { displayPath: key };
+        return undefined;
       },
-      async readText(target) {
+      async readText(target, signal) {
+        if (signal?.aborted) throw new Error('aborted');
         return files[target.displayPath] ?? null;
       },
     },
@@ -215,6 +232,66 @@ test('拦截：上游门是 pass 时，写入放行', async () => {
   apply(ctx, {});
   const { decision } = await firePreExecute(listeners, mkExec('write', { file_path: 'stages/p1/plan.md' }));
   assert.equal(decision.kind, 'allow');
+});
+
+test('拦截：读门记录必须传 opts.cwd（真机 bug 回归守卫）', async () => {
+  // 真机事故：`ctx.fs.resolve(path)` 不传 opts.cwd 时，宿主按
+  // `this.config.cwd`（宿主进程目录）解析相对路径 `stages/p0/GATE.json`，
+  // 于是门文件在项目里却读不到 → 误报 GATE_MISSING。
+  // 实测 6 次（seq 4134/4139/4193/4956/4975/4985，门 mtime 均早于 deny 时刻）。
+  //
+  // 这条测试不看结果对不对，只看**调用契约**：门真的被读时，cwd 必须到位。
+  // 早先没有它，所以「漏传 cwd」能把所有拦截测试跑绿——因为桩忽略了 opts。
+  const workspace = makeWorkspace(true);
+  const { ctx, listeners } = makeCtx({
+    files: { 'stages/p0/GATE.json': '{"verdict":"pass"}' },
+    workspace,
+  });
+  apply(ctx, {});
+  ctx.fs.resolveCalls.length = 0;
+
+  await firePreExecute(listeners, mkExec('write', { file_path: 'stages/p1/plan.md' }));
+
+  const gateReads = ctx.fs.resolveCalls.filter((c) => String(c.path).includes('GATE.json'));
+  assert.ok(gateReads.length > 0, '应该真的去读了上游门记录');
+  for (const call of gateReads) {
+    assert.equal(
+      call.opts?.cwd,
+      workspace,
+      'readGate 调 resolve 时必须传会话 cwd（' + workspace + '），否则相对路径会按宿主进程 cwd 解析',
+    );
+  }
+});
+
+test('拦截：marker 在会话中途创建后，下一次调用立即生效（缓存不能锁死）', async () => {
+  // 真机事故：marker 由会话自己在 03:03:24 创建，而创建它的那次 pre-execute 早 1 秒，
+  // marker 尚不存在 → adoptionOf 把 adopted:false 写进缓存并永久生效，
+  // 直到 12:40:21 才第一次 deny。中间 629 分钟，门等于没装。
+  //
+  // 这里用真实临时目录：先不建 marker 跑一次，再建 marker 跑一次。
+  const workspace = makeWorkspace(false); // 故意不建 marker
+  const { ctx, listeners } = makeCtx({
+    files: { 'stages/p0/GATE.json': '{"verdict":"pass"}' },
+    workspace,
+  });
+  apply(ctx, {});
+
+  // 第一次：没有 marker，应放行
+  const first = await firePreExecute(listeners, mkExec('write', { file_path: 'stages/p1/plan.md' }));
+  assert.equal(first.decision.kind, 'allow', '未采用阶段门时放行');
+
+  // 用户现在创建 marker（模拟会话中途创建）
+  writeFileSync(join(workspace, '.stage-gate.json'), '{"enabled":true}', 'utf8');
+
+  // 第二次：门应生效——上游 p0 门是 pass，所以仍放行；
+  // 但要证明「机制确实开始运行了」，用一个没有上游门的目标来看它是否开始拦。
+  const second = await firePreExecute(listeners, mkExec('write', { file_path: 'stages/p2/plan.md' }));
+  assert.equal(
+    second.decision.kind,
+    'deny',
+    'marker 创建后机制必须立即生效——缓存住 adopted:false 会让它永远不生效',
+  );
+  assert.equal(second.decision.info.code, 'GATE_MISSING');
 });
 
 test('拦截：上游门是 fail 时被 deny', async () => {

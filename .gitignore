@@ -12,3 +12,6 @@ desktop.ini
 
 # 本地验证产物（evidence/ 里的存证要提交，但临时快照不入库）
 *-snapshot.local.*
+
+# 指挥法草稿区（账本 / brief / exec / 复核记录 / gates 原始输出）
+.zhll/

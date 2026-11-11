@@ -256,15 +256,31 @@ export function apply(ctx, config = {}) {
     onWarn: (message) => log('warn', message),
   });
 
-  /** marker 缓存（C3）：按项目根缓存，避免每次读盘。 */
+  /**
+   * marker 缓存（C3）：按项目根缓存，避免每次读盘。
+   *
+   * ## 2026-11-11 修：**只缓存「已采用」，不缓存「未采用」**
+   *
+   * 真机实测（764 分钟会话）：`.stage-gate.json` 由那次会话自己在 `03:03:24` 创建，
+   * 而创建它的那个调用的 pre-execute 早 1 秒跑——那一刻 marker 还不存在，
+   * 于是 `adoptionOf` 把 `{adopted:false}` 写进缓存并**永久生效**，
+   * 直到 `12:40:21` 才第一次 deny。**中间 629 分钟，门等于没装。**
+   *
+   * 为什么「未采用」不能缓存：项目在一秒之内就可能变成「已采用」（用户创建 marker），
+   * 而缓存不会失效。反过来「已采用」不会自己变回去（除非用户删 marker，那时重启即可）。
+   *
+   * 代价：「未采用」的判定每次都要 `existsSync` 一次。相对「门静默失效 629 分钟」，
+   * 这个代价可以接受——stat 一次纳秒级，而失效是小时级。
+   */
   const markerCache = new Map();
 
-  /** 该项目是否已采用阶段门（有 marker）。 */
+  /** 该项目是否已采用阶段门（有 marker）。**只缓存正向结果**。 */
   function adoptionOf(baseDir) {
     if (baseDir === undefined) return { adopted: false, marker: null };
     if (markerCache.has(baseDir)) return markerCache.get(baseDir);
     const result = readMarker(baseDir);
-    markerCache.set(baseDir, result);
+    // 只在「已采用」时缓存；「未采用」不缓存，下次调用重读。
+    if (result.adopted) markerCache.set(baseDir, result);
     return result;
   }
 
@@ -301,13 +317,37 @@ export function apply(ctx, config = {}) {
     }
   }
 
-  /** 读上游门记录的原始文本；读不到返回 null。 */
-  async function readGate(stage) {
+  /**
+   * 读上游门记录的原始文本；读不到返回 null。
+   *
+   * ## 2026-11-11 修的两处（都是真机 bug，实测 6 次「缺门」全由此产生）
+   *
+   * **① 必须传 `opts.cwd`。** 宿主 `ctx.fs.resolve(path, opts)` 的实现是
+   * `resolveLocalTarget(opts?.cwd ?? this.config.cwd, path)`——不传 cwd 时，
+   * 相对路径 `stages/p0/GATE.json` 会按**宿主进程的 cwd** 解析，而那不是项目目录。
+   * 解析落到别处 → 读不到 → 报「缺门」，而门文件其实在项目里躺着。
+   * 宿主自己的 `dsh-tool-fs` 是这么取的（出处：app.asar 内 `dsh-tool-fs/lib/index.js`）：
+   *   `const cwd = exec.agent === undefined ? undefined : await ctx.workingDirectory.ensure(exec.agent, exec.signal)`
+   *   `ctx.fs.resolve(path, { ...(cwd !== undefined ? { cwd } : {}), signal: exec.signal })`
+   *
+   * **② 返回值是对象，不是字符串。** `resolve()` 返回 `{ targetKey, displayPath }`。
+   * 早期代码写 `if (resolved === undefined) return null`——这个判断对「解析失败」永不成立
+   * （失败会 throw，不会返回 undefined），而对「成功」又把整个对象喂给了 `readText`。
+   * 正确用法：把对象原样交给 `readText`（它要的正是 `{displayPath, targetKey}`）。
+   *
+   * @param {string} stage
+   * @param {{cwd?: string, signal?: AbortSignal}} [opts] 会话 cwd 与取消信号
+   */
+  async function readGate(stage, opts = {}) {
     const target = `${root}/${stage}/${cfg.gateFile}`;
     try {
-      const resolved = await ctx.fs.resolve(target);
-      if (resolved === undefined) return null;
-      return await ctx.fs.readText(resolved);
+      const resolveOpts = {
+        ...(typeof opts.cwd === 'string' && opts.cwd !== '' ? { cwd: opts.cwd } : {}),
+        ...(opts.signal === undefined ? {} : { signal: opts.signal }),
+      };
+      const resolved = await ctx.fs.resolve(target, resolveOpts);
+      if (resolved === undefined || resolved === null) return null;
+      return await ctx.fs.readText(resolved, opts.signal);
     } catch (error) {
       // 读失败 ≠ 文件不存在。把区别说出来，否则用户只会看到「缺门」，
       // 而真正原因是读盘坏了（权限、编码、服务异常）。
@@ -365,8 +405,19 @@ export function apply(ctx, config = {}) {
 
     if (probe.kind === 'allow') return next();
 
-    // 未知工具在 probe 阶段就 deny 了，直接返回
+    // 未知工具在 probe 阶段就 deny 了。
+    //
+    // 2026-11-11 修：这段原先直接 `return toDecision(probe)`，**在 observe 检查之前**，
+    // 于是 `mode=observe` 对 UNKNOWN_WRITE_TOOL 完全失效——既硬拦、又不留 would-block 记录。
+    // 这正是「误拦率到了用户面前才被发现」的结构性原因：没人能在 observe 下量出它。
+    // 现在统一走下面的 observe 分流：observe 时只 warn + 入账，enforce 时才 deny。
     if (probe.kind === 'deny' && probe.code === REASONS.UNKNOWN_WRITE_TOOL) {
+      if (cfg.mode === 'observe') {
+        log('warn', `[plugin-kit][observe] 本可以拦住：${probe.code} — ${probe.message}`, { code: probe.code, tool: toolName });
+        ledger.append({ stage: null, kind: 'would-block', verdict: probe.code, baseDir });
+        return next();
+      }
+      ledger.append({ stage: null, kind: 'blocked', verdict: probe.code, baseDir });
       return toDecision(probe, log);
     }
 
@@ -392,7 +443,10 @@ export function apply(ctx, config = {}) {
     const upstream = findUpstream(exec, cfg.layout, root, baseDir);
     if (upstream === null) return next();
 
-    gateCache.set(upstream, await readGate(upstream));
+    // 读上游门记录：**必须传 cwd 与 signal**。
+    // 不传 cwd → 相对路径按宿主进程 cwd 解析 → 门文件在项目里却读不到 → 误报「缺门」。
+    // 这是实测 6 次 GATE_MISSING 的根因（门 mtime 均早于 deny 时刻）。
+    gateCache.set(upstream, await readGate(upstream, { cwd: baseDir, signal: exec.signal }));
 
     const final = decide({
       toolName,
