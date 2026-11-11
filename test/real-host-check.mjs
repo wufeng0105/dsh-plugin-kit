@@ -14,10 +14,12 @@ import { readFileSync, mkdirSync, rmSync, existsSync, writeFileSync } from 'node
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-const PLUGIN = process.argv[2];
-if (PLUGIN === undefined) {
-  console.error('用法：node real-host-check.mjs <已安装插件目录>');
-  process.exit(2);
+const PLUGIN = process.argv[2] ?? new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+if (process.argv[2] === undefined) {
+  // 2026-11-11：本文件此前**从不自动执行**——它要一个「已安装插件目录」参数，
+  // 而它又不在 `npm run check` 链里，于是没人发现它从来没真跑过（桩还缺 4 个服务，
+  // 一跑就 `ctx.effect is not a function`）。不传参时退回仓库根，让它进自动链。
+  console.log('[real-host-check] 未传插件目录，使用仓库根（自动模式）');
 }
 
 const { apply } = await import(`file:///${PLUGIN.replace(/\\/g, '/')}/index.js`);
@@ -41,12 +43,26 @@ function makeRealishCtx(workspace) {
       listeners.get(event).push(handler);
       return () => {};
     },
-    logger(level, message) {
-      logs.push(`${level}: ${message}`);
+    // 2026-11-11 补：这个桩原先写 `logger(level, message)`（普通函数）。
+    // 真实宿主里 `ctx.logger` 是 **callable 服务**：`ctx.logger.warn(msg)`。
+    // 插件的 log() 会先找 `logger[level]`，找不到才退回 `logger(level, payload)`——
+    // 而带结构化字段时 payload 是对象，`String(payload)` 会变成 "[object Object]"，
+    // 于是「skip 留痕」这类按文本找日志的断言永远找不到。
+    // 桩按真实形状写，才能测到插件真的输出的东西。
+    logger: {
+      info(payload) { logs.push(`info: ${typeof payload === 'string' ? payload : payload?.message}`); },
+      warn(payload) { logs.push(`warn: ${typeof payload === 'string' ? payload : payload?.message}`); },
+      error(payload) { logs.push(`error: ${typeof payload === 'string' ? payload : payload?.message}`); },
+      debug(payload) { logs.push(`debug: ${typeof payload === 'string' ? payload : payload?.message}`); },
     },
     fs: {
-      async resolve(p) {
-        const abs = join(workspace, p);
+      async resolve(p, opts) {
+        // 2026-11-11 补：这个桩原先写 `async resolve(p)`，**不收 opts**。
+        // 真实宿主是 resolve(path, {cwd}) —— 桩忽略它，就等于把 WP3 刚修的
+        // 「readGate 漏传 cwd」那个真机 bug 又隐形了一次。
+        // 现在给了 cwd 就按 cwd 拼路径，没给就按 workspace 拼（宿主默认值的替身）。
+        const base = typeof opts?.cwd === 'string' && opts.cwd !== '' ? opts.cwd : workspace;
+        const abs = join(base, p);
         return existsSync(abs) ? { displayPath: p, absPath: abs } : undefined;
       },
       async readText(target) {
@@ -54,6 +70,26 @@ function makeRealishCtx(workspace) {
         reads.push(target.displayPath);
         return text;
       },
+    },
+    // 下面四个服务本文件原先没有：脚本在 `ctx.effect is not a function` 处直接崩，
+    // 于是「未知工具默认 deny」那条断言从来没真跑过（它在 npm run check 之外，所以没人发现）。
+    // 补上桩，让场景真的执行。
+    workingDirectory: { get: () => workspace },
+    get() {
+      return undefined; // 无 storage，台账退到内存 + 文件镜像
+    },
+    skills: {
+      registerProvider() {
+        return () => {};
+      },
+    },
+    systemPrompt: {
+      section() {
+        return () => {};
+      },
+    },
+    effect(fn) {
+      return fn();
     },
   };
   return { ctx, listeners, logs, reads };
@@ -73,7 +109,18 @@ async function firePreExecute(listeners, exec) {
   return { decision, nextCalled };
 }
 
-const exec = (tool, args) => ({ name: tool, arguments: args, signal: { aborted: false } });
+// 2026-11-11 补：`agent.session` 原本没给。
+//
+// 没有它，`baseDirOf()` 只能退到 `process.cwd()`，于是 marker 检查看的是插件仓库
+// 而不是临时工作区 → 永远是「未采用」→ 所有场景都走 `return next()`，
+// 「缺上游门时被拦」之类断言**根本没机会成立**。这个文件在 WP4 之前就因为
+// `ctx.effect is not a function` 先崩了，所以谁都没发现它其实测不到门。
+const exec = (tool, args) => ({
+  name: tool,
+  arguments: args,
+  signal: { aborted: false },
+  agent: { session: 'real-host-check-session' },
+});
 
 // ---------------------------------------------------------------- 场景
 
@@ -89,12 +136,17 @@ async function run() {
   mkdirSync(join(ws, 'stages', 'p0'), { recursive: true });
   mkdirSync(join(ws, 'src'), { recursive: true });
   writeFileSync(join(ws, 'src', 'a.js'), '// src', 'utf8');
+  // 必须先「采用」阶段门（marker），否则机制按设计完全不生效——那是另一条语义。
+  writeFileSync(join(ws, '.stage-gate.json'), '{"enabled":true}', 'utf8');
 
   try {
     // 场景 1：缺上游门 → 应拦
+    //
+    // 2026-11-11 D1 裁定后默认模式是 observe，所以每个「应拦」的场景都要显式
+    // mode: 'enforce'。这不是放宽断言：默认值变了，断言必须说清「谁选择了拦」。
     {
       const { ctx, listeners, logs } = makeRealishCtx(ws);
-      apply(ctx, {});
+      apply(ctx, { mode: 'enforce' });
       const { decision } = await firePreExecute(listeners, exec('write', { file_path: 'stages/p1/plan.md' }));
       check(
         '缺上游门时，写 p1 被拦',
@@ -109,7 +161,7 @@ async function run() {
     {
       writeFileSync(join(ws, 'stages', 'p0', 'GATE.json'), '{"stage":"p0","verdict":"pass","by":"human","at":"2026-11-09T12:00:00Z"}', 'utf8');
       const { ctx, listeners, reads } = makeRealishCtx(ws);
-      apply(ctx, {});
+      apply(ctx, { mode: 'enforce' });
       const { decision, nextCalled } = await firePreExecute(listeners, exec('write', { file_path: 'stages/p1/plan.md' }));
       check('补上 pass 门后放行', decision.kind === 'allow', `decision=${decision.kind}`);
       check('放行时调了 next（waterfall 纪律）', nextCalled === true, `nextCalled=${nextCalled}`);
@@ -119,7 +171,7 @@ async function run() {
     // 场景 3：写源码不拦、且不读盘
     {
       const { ctx, listeners, reads } = makeRealishCtx(ws);
-      apply(ctx, {});
+      apply(ctx, { mode: 'enforce' });
       const { decision } = await firePreExecute(listeners, exec('write', { file_path: 'src/b.js' }));
       check('写源码放行', decision.kind === 'allow', `decision=${decision.kind}`);
       check('写源码时零 I/O（没有读任何 GATE.json）', reads.length === 0, `reads=${JSON.stringify(reads)}`);
@@ -137,19 +189,38 @@ async function run() {
       check('observe 模式留下 warn', logs.some((l) => l.includes('observe')), logs.join(' | ').slice(0, 80));
     }
 
-    // 场景 5：未知工具默认 deny
+    // 场景 5：未知工具不再被拦（D1 裁定：不按工具身份判罪）
+    //
+    // 这里用 enforce 跑，才能证明「放行」不是 observe 造成的，而是 UNKNOWN 那一层真的没了。
     {
       const { ctx, listeners } = makeRealishCtx(ws);
-      apply(ctx, {});
+      apply(ctx, { mode: 'enforce' });
       const { decision } = await firePreExecute(listeners, exec('future_writer', { path: 'stages/p1/a.md' }));
-      check('未知工具默认 deny', decision.kind === 'deny' && decision.info?.code === 'UNKNOWN_WRITE_TOOL', `code=${decision.info?.code}`);
+      check(
+        '未知工具放行（enforce 下也不拦）',
+        decision.kind === 'allow',
+        `decision=${decision.kind} code=${decision.info?.code}`,
+      );
+    }
+
+    // 场景 5b：真实会话里被误拦的 9 个只读工具，在真 fs 上全部放行
+    {
+      const { ctx, listeners } = makeRealishCtx(ws);
+      apply(ctx, { mode: 'enforce' });
+      const NINE = ['read', 'ask_user_question', 'list_subagent_models', 'todo_write', 'read', 'skill', 'plugin_manager', 'subagent', 'ask_user_question'];
+      const blocked = [];
+      for (const tool of NINE) {
+        const { decision } = await firePreExecute(listeners, exec(tool, { file_path: 'stages/p1/a.md', prompt: 'stages/p1 只读审查' }));
+        if (decision.kind !== 'allow') blocked.push(`${tool}→${decision.info?.code}`);
+      }
+      check('9 个曾被误拦的只读工具全部放行', blocked.length === 0, blocked.join(', ') || '0 个被拦');
     }
 
     // 场景 6：skip 门放行但留痕
     {
       writeFileSync(join(ws, 'stages', 'p0', 'GATE.json'), '{"verdict":"skip","reason":"赶时间"}', 'utf8');
       const { ctx, listeners, logs } = makeRealishCtx(ws);
-      apply(ctx, {});
+      apply(ctx, { mode: 'enforce' });
       const { decision } = await firePreExecute(listeners, exec('write', { file_path: 'stages/p1/plan.md' }));
       check('skip 门放行', decision.kind === 'allow', `decision=${decision.kind}`);
       check('skip 留痕', logs.some((l) => l.includes('skip')), logs.join(' | ').slice(0, 80));
@@ -159,7 +230,7 @@ async function run() {
     {
       writeFileSync(join(ws, 'stages', 'p0', 'GATE.json'), '{"verdict":"fail"}', 'utf8');
       const { ctx, listeners } = makeRealishCtx(ws);
-      apply(ctx, {});
+      apply(ctx, { mode: 'enforce' });
       const { decision } = await firePreExecute(listeners, exec('write', { file_path: 'stages/p1/plan.md' }));
       check('fail 门阻断', decision.kind === 'deny' && decision.info?.code === 'GATE_FAILED', `code=${decision.info?.code}`);
     }

@@ -74,7 +74,7 @@ test('extractTarget: bash 只拿命令文本', () => {
   });
 });
 
-test('extractTarget: 未知工具返回 unknown（不是放行）', () => {
+test('extractTarget: 未知工具仍返回 unknown（内核不猜它写什么）', () => {
   assert.deepEqual(extractTarget('some_future_tool', { path: 'stages/p1/a.md' }), { kind: 'unknown' });
 });
 
@@ -147,10 +147,59 @@ test('decide: 不在 stages 下 → 放行', () => {
   assert.deepEqual(r, { kind: 'allow' });
 });
 
-test('decide: 未知工具 → deny（不是放行）', () => {
+test('decide: 未知工具 → 放行（D1 裁定：不再按工具身份判罪）', () => {
+  // 2026-11-11 D1 裁定前，这里断言的是 deny + UNKNOWN_WRITE_TOOL。
+  // 那个行为被裁定删除，原因见 lib/gate.js 的注释：739 次真实调用里 77 次落到这个分支，
+  // 被拦的 9 次全是只读工具、0 次真阳性，还拦掉了派独立审查员的 subagent 调用。
   const r = decide({ toolName: 'mystery_tool', args: {}, root: ROOT, readGate: () => null });
-  assert.equal(r.kind, 'deny');
-  assert.equal(r.code, REASONS.UNKNOWN_WRITE_TOOL);
+  assert.deepEqual(r, { kind: 'allow' });
+});
+
+test('decide: 9 个真实会话里被误拦的只读工具，现在全部放行', () => {
+  // 这 9 条来自 session.v4.jsonl 的真实 tool/call 入参（seq 3075/3094/3458/3513/3525/
+  // 3664/3957/5011/5037），不是编的。它们当时全被 UNKNOWN_WRITE_TOOL 拦掉。
+  const REAL = [
+    // read ×2（真实入参带 limit/offset）
+    ['read', { file_path: 'C:\\Users\\Administrator\\Documents\\ProgramFilesCode\\_sandbox\\shanchu\\lib\\store.mjs', limit: 30, offset: 96 }],
+    ['read', { file_path: 'C:\\Users\\Administrator\\Documents\\ProgramFilesCode\\_sandbox\\shanchu\\lib\\core.mjs', limit: 45, offset: 1 }],
+    // ask_user_question ×2
+    ['ask_user_question', { questions: [{ header: '数据修复', id: 'cleanup', multi_select: false, options: [{ label: '清掉全部 projcache 残留（推荐）', description: '删掉 199 条 projcache 缓存' }], question: '怎么处理？' }] }],
+    ['ask_user_question', { questions: [{ header: '门的配置', id: 'allowed_tools', multi_select: false, options: [{ label: '不加白名单', description: '不改配置' }], question: '阶段门把 subagent / todo_write / skill 这些非文件写入工具也拦了，怎么处理？' }] }],
+    ['list_subagent_models', { provider: '__none__' }],
+    ['todo_write', { todos: [{ content: '定位根因：删除只清归档索引+工作区引用，子代理会话落入「未分组」', status: 'completed' }] }],
+    ['skill', { name: 'kimi-webbridge' }],
+    ['plugin_manager', { action: 'remove_bundle', target: '@local/shanchu' }],
+    // 这条最重要：它一次被拦，等于「机制阻止了它自己声称要促进的事」——
+    // 派独立审查员的子代理调用。它的 prompt 正文里还带着 stages/ 路径。
+    ['subagent', {
+      description: 'P3 独立审查删除功能',
+      prompt: '你是独立审查员。只读产物，不写代码。判据来源：`C:\\Users\\Administrator\\Documents\\ProgramFilesCode\\_sandbox\\shanchu\\stages\\p0\\需求.md`',
+    }],
+  ];
+  assert.equal(REAL.length, 9, '清单必须是真实被拦的那 9 条');
+  for (const [toolName, args] of REAL) {
+    const r = decide({ toolName, args, root: ROOT, readGate: () => null });
+    assert.equal(r.kind, 'allow', `${toolName} 应放行，实际 ${JSON.stringify(r)}`);
+  }
+});
+
+test('decide: 写工具仍然走门（deny 没被删，只删了「未知工具」那一层）', () => {
+  // 这一条是「删对了」而不是「删多了」的守卫：
+  // D1 只删 UNKNOWN 那一类，写阶段产物仍按 GATE.json 判定。
+  const write = decide({ toolName: 'write', args: { file_path: 'stages/p1/plan.md' }, root: ROOT, readGate: () => null });
+  assert.equal(write.kind, 'deny');
+  assert.equal(write.code, REASONS.GATE_MISSING);
+
+  const edit = decide({ toolName: 'edit', args: { file_path: 'stages/p1/plan.md', old_string: 'a', new_string: 'b' }, root: ROOT, readGate: () => null });
+  assert.equal(edit.kind, 'deny');
+  assert.equal(edit.code, REASONS.GATE_MISSING);
+});
+
+test('decide: 未知工具即使参数里带 stages 路径也放行（不靠名单兜底）', () => {
+  // 未来宿主新增的写工具会命中这一条：它放行。这是裁定显式接受的 fail-open，
+  // 写在这里是为了让「代价」可测、可见，而不是一句注释。
+  const r = decide({ toolName: 'future_writer', args: { target_file: 'stages/p1/a.md' }, root: ROOT, readGate: () => null });
+  assert.deepEqual(r, { kind: 'allow' });
 });
 
 test('decide: 第一道门 p0 无前置 → 放行', () => {

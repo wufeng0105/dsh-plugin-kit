@@ -27,6 +27,13 @@ const mutations = [
     find: 'if (result.adopted) markerCache.set(baseDir, result);',
     replace: 'markerCache.set(baseDir, result);',
   },
+  {
+    // 2026-11-11 D1 裁定：root 从配置项移除，理由是「配错即静默放行」。
+    // 这个变异把 config.root 读回来，验证守卫能抓到「配错就静默放行」。
+    name: '变异 C：root 恢复成可配置（配错即静默放行）',
+    find: 'const root = normalizePath(DEFAULT_ROOT);',
+    replace: 'const root = normalizePath(config.root ?? DEFAULT_ROOT);',
+  },
 ];
 
 const results = [];

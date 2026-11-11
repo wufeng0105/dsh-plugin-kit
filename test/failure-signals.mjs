@@ -224,7 +224,9 @@ await (async () => {
     await checkAsync('C3-signal', '坏 GATE.json → 拦截时给出「坏」而不是「缺」', async () => {
       const local = makeCtx({ workspace: ws });
       writeFileSync(join(ws, 'stages', 'p0', 'GATE.json'), '{"verdict":"PASS"}', 'utf8');
-      apply(local.ctx, {});
+      // D1 裁定后默认 observe，这条断言「会被拦」就必须显式选 enforce——
+      // 它测的是「坏门与缺门的信号可区分」，不是「默认会拦」。
+      apply(local.ctx, { mode: 'enforce' });
       const { decision } = await firePre(local.listeners, 'write', { file_path: 'stages/p1/a.md' });
       assert(decision.kind === 'deny', '应被拦');
       assert(decision.info.code === 'GATE_MALFORMED', `代码应是 GATE_MALFORMED，实际 ${decision.info.code}`);

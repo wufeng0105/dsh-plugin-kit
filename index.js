@@ -18,7 +18,7 @@
  * @module @wufeng0105/dsh-stage-gate
  */
 
-import { decide, normalizePath, DEFAULT_LAYOUT, REASONS, extractTarget, locateStage, relativize } from './lib/gate.js';
+import { decide, normalizePath, DEFAULT_LAYOUT, DEFAULT_ROOT, extractTarget, locateStage, relativize } from './lib/gate.js';
 import { readMarker, reconcile, createLedger, MARKER_FILE } from './lib/ledger.js';
 import { existsSync as EXISTS, readFileSync as READ_FILE, mkdirSync as MKDIR } from 'node:fs';
 import { join as RESOLVE, dirname as DIRNAME } from 'node:path';
@@ -80,11 +80,13 @@ function toDecision(result, log) {
 export function apply(ctx, config = {}) {
   const cfg = {
     enabled: config.enabled ?? true,
-    mode: config.mode ?? 'enforce',
-    root: config.root ?? 'stages',
+    mode: config.mode ?? 'observe',
+    // root 2026-11-11 D1 裁定后不再是配置项：**故意不读 config.root**。
+    // 只删 Schema 声明不够——schemastery 不剥未声明字段（实测），
+    // 用户塞 `root: 'my-stages'` 仍会透传到这里。真按它跑就是「配错即静默失效」。
+    // 所以这里硬写 DEFAULT_ROOT，让那个值彻底失效。
     layout: Array.isArray(config.layout) && config.layout.length > 0 ? config.layout : DEFAULT_LAYOUT,
     gateFile: config.gateFile ?? 'GATE.json',
-    allowedTools: Array.isArray(config.allowedTools) ? config.allowedTools : [],
   };
 
   /**
@@ -232,13 +234,19 @@ export function apply(ctx, config = {}) {
 
   // 启动自检（第三段）：配置值必须能被看见。
   // 没有这行，用户无法确认自己的配置到底生效了没有——这是插件最基本的要求。
+  //
+  // mode 必须是这一行里最醒目的一个：observe 是默认值，用户看到的「没被拦」
+  // 默认不是「门过了」，而是「门只在记账」。不写出来，用户会以为门坏了。
   log(
     'info',
-    `[plugin-kit] 拦截已启用 → root=${cfg.root} gateFile=${cfg.gateFile} mode=${cfg.mode} ` +
-      `layout=${cfg.layout.length}阶段 allowedTools=${cfg.allowedTools.length}`,
+    `[plugin-kit] 已启用 → root=${DEFAULT_ROOT} gateFile=${cfg.gateFile} mode=${cfg.mode} ` +
+      `layout=${cfg.layout.length}阶段`,
   );
 
-  const root = normalizePath(cfg.root);
+  // `root` 2026-11-11 D1 裁定后不再是配置项：配错它会**静默失效**
+  // （认不出阶段写入 → decide 返回 allow → 既不拦也不报错）。
+  // 一个能把机制静默关掉的开关，不该存在。
+  const root = normalizePath(DEFAULT_ROOT);
 
   /**
    * 台账（C4）：优先 H15 storage，降级到内存 + 文件镜像。
@@ -367,9 +375,7 @@ export function apply(ctx, config = {}) {
   ctx.on('tools/pre-execute', async (exec, next) => {
     if (exec.signal?.aborted === true) return next();
 
-    // 允许显式登记的额外工具（默认 deny 的逃生门）
     const toolName = String(exec.name ?? '');
-    if (cfg.allowedTools.includes(toolName)) return next();
 
     // decide 是同步的，但 readGate 是异步的 —— 先同步判断「要不要查门」
     const baseDir = baseDirOf(exec);
@@ -404,22 +410,6 @@ export function apply(ctx, config = {}) {
     }
 
     if (probe.kind === 'allow') return next();
-
-    // 未知工具在 probe 阶段就 deny 了。
-    //
-    // 2026-11-11 修：这段原先直接 `return toDecision(probe)`，**在 observe 检查之前**，
-    // 于是 `mode=observe` 对 UNKNOWN_WRITE_TOOL 完全失效——既硬拦、又不留 would-block 记录。
-    // 这正是「误拦率到了用户面前才被发现」的结构性原因：没人能在 observe 下量出它。
-    // 现在统一走下面的 observe 分流：observe 时只 warn + 入账，enforce 时才 deny。
-    if (probe.kind === 'deny' && probe.code === REASONS.UNKNOWN_WRITE_TOOL) {
-      if (cfg.mode === 'observe') {
-        log('warn', `[plugin-kit][observe] 本可以拦住：${probe.code} — ${probe.message}`, { code: probe.code, tool: toolName });
-        ledger.append({ stage: null, kind: 'would-block', verdict: probe.code, baseDir });
-        return next();
-      }
-      ledger.append({ stage: null, kind: 'blocked', verdict: probe.code, baseDir });
-      return toDecision(probe, log);
-    }
 
     // 需要查门：这时才做异步 I/O
     const gateCache = new Map();

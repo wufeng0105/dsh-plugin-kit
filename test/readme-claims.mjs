@@ -115,12 +115,15 @@ await claimAsync('README:5', '装它 → skill 出现在目录 / 每会话有纪
   const ws = makeWorkspace();
   try {
     const { ctx, listeners, calls } = makeCtx({ workspace: ws });
-    apply(ctx, {});
+    // 2026-11-11 D1 裁定：默认模式改为 observe，所以「会被拦住」现在要显式选 enforce。
+    // README 第 3、5 行还写着「强制力（未过门拦截）」，那句要等 WP6 统一改；
+    // 本文件只核对**代码能力**，不替 README 圆场。
+    apply(ctx, { mode: 'enforce' });
     assert(calls.skillProvider !== undefined, 'skill provider 没注册');
     assert(calls.systemPromptSection !== undefined, '纪律段没挂');
     const { decision } = await firePre(listeners, 'write', { file_path: 'stages/p1/a.md' });
     assert(decision.kind === 'deny', '未过门没被拦');
-    return '三项都成立';
+    return '三项都成立（enforce 下）';
   } finally { rmSync(ws, { recursive: true, force: true }); }
 });
 
@@ -149,10 +152,29 @@ await claimAsync('README:98', 'mode=observe：只记日志不拦', async () => {
   } finally { rmSync(ws, { recursive: true, force: true }); }
 });
 
-claim('README:99', 'root 可配（换成别的目录名）', () => {
-  const r = decide({ toolName: 'write', args: { file_path: 'my-stages/p1/a.md' }, root: 'my-stages', readGate: () => null });
-  assert(r.kind === 'deny' && r.code === 'GATE_MISSING', `换成 my-stages 后应能识别，实际 ${JSON.stringify(r)}`);
-  return '成立';
+await claimAsync('README:99', 'root 已不是配置项，且塞进来也不生效', async () => {
+  // 2026-11-11 D1 裁定：root 从 Config 移除（配错会静默关掉整个机制）。
+  //
+  // 关键实测：schemastery **不剥未声明字段**，所以 `validate({root:'x'})`
+  // 仍会把 root 透传出来。只删 Schema 声明是**不够的**——
+  // 真正让配置失效的是 `apply()` 里硬写 DEFAULT_ROOT、不读 config.root。
+  // 所以这条断言分两半测：Schema 层没了，以及运行时也不认。
+  const r = Config['~standard'].validate({ root: 'my-stages' });
+  assert(r.issues === undefined, '塞 root 不该报错（未声明字段被忽略而不是拒绝）');
+
+  // 运行时：apply 收到 root 也必须仍然按 stages 判
+  const ws = makeWorkspace();
+  try {
+    const { ctx, listeners } = makeCtx({ workspace: ws });
+    apply(ctx, { mode: 'enforce', root: 'my-stages' });
+    // stages/p1 缺 p0 门 → 必须 deny；若 root 生效了，会因认不出而 allow
+    const { decision } = await firePre(listeners, 'write', { file_path: 'stages/p1/a.md' });
+    assert(
+      decision.kind === 'deny' && decision.info.code === 'GATE_MISSING',
+      `root 配了 my-stages，但机制必须仍按 stages 判定（实际 ${decision.kind}）——否则配错就静默放行`,
+    );
+    return '成立：Schema 已移除，且运行时硬用 stages';
+  } finally { rmSync(ws, { recursive: true, force: true }); }
 });
 
 claim('README:100', 'layout 可配（曾缺失，现已补）', () => {
@@ -180,26 +202,32 @@ claim('README:101', 'gateFile 可配', () => {
   return '成立';
 });
 
-await claimAsync('README:102', 'allowedTools：登记后未知工具放行', async () => {
+// ---- 配置表（2026-11-11 D1 裁定后：allowedTools 已删，mode 默认 observe）
+await claimAsync('README:102', 'allowedTools 已不再是配置项（拒绝被当成放行开关）', async () => {
+  // 这条原先是「登记后未知工具放行」。allowedTools 随 UNKNOWN_WRITE_TOOL 一起删了，
+  // 所以现在核对的是**反面**：塞进来也不产生任何效果。
   const ws = makeWorkspace();
   try {
-    const { ctx, listeners } = makeCtx({ workspace: ws });
-    apply(ctx, { allowedTools: ['mystery_writer'] });
-    const { decision } = await firePre(listeners, 'mystery_writer', { path: 'stages/p1/a.md' });
-    assert(decision.kind === 'allow', '登记后应放行');
-    return '成立';
+    const withIt = makeCtx({ workspace: ws });
+    apply(withIt.ctx, { mode: 'enforce', allowedTools: ['mystery_writer'] });
+    const a = await firePre(withIt.listeners, 'mystery_writer', { path: 'stages/p1/a.md' });
+    const without = makeCtx({ workspace: ws });
+    apply(without.ctx, { mode: 'enforce' });
+    const b = await firePre(without.listeners, 'mystery_writer', { path: 'stages/p1/a.md' });
+    assert(a.decision.kind === b.decision.kind, `旧配置项改变了行为：${a.decision.kind} vs ${b.decision.kind}`);
+    assert(a.decision.kind === 'allow', '未知工具现在一律放行');
+    return '已删除，且残余配置不生效';
   } finally { rmSync(ws, { recursive: true, force: true }); }
 });
 
-await claimAsync('README:102b', 'allowedTools 未登记时未知工具被拦', async () => {
+await claimAsync('README:102b', '未知工具即使未登记也不被拦（D1 裁定）', async () => {
   const ws = makeWorkspace();
   try {
     const { ctx, listeners } = makeCtx({ workspace: ws });
-    apply(ctx, {});
+    apply(ctx, { mode: 'enforce' });
     const { decision } = await firePre(listeners, 'mystery_writer', { path: 'stages/p1/a.md' });
-    assert(decision.kind === 'deny', '未登记的未知工具应被拦');
-    assert(decision.info.code === 'UNKNOWN_WRITE_TOOL');
-    return '成立';
+    assert(decision.kind === 'allow', `未知工具应放行，实际 ${decision.kind}`);
+    return '成立：不再按工具身份判罪';
   } finally { rmSync(ws, { recursive: true, force: true }); }
 });
 
@@ -226,10 +254,27 @@ await claimAsync('README:152b', '有 marker → 拦截生效', async () => {
   const ws = makeWorkspace(true);
   try {
     const { ctx, listeners } = makeCtx({ workspace: ws });
+    // D1 裁定后默认是 observe，所以「拦截生效」必须显式选 enforce。
+    // marker 仍是必要的：没有它，enforce 也不管（机制只约束愿意进约定目录的项目）。
+    apply(ctx, { mode: 'enforce' });
+    const { decision } = await firePre(listeners, 'write', { file_path: 'stages/p1/a.md' });
+    assert(decision.kind === 'deny', '有 marker 且 enforce 时应拦');
+    return '成立';
+  } finally { rmSync(ws, { recursive: true, force: true }); }
+});
+
+await claimAsync('README:152c', '有 marker 但默认 observe → 不拦，只入账', async () => {
+  // 默认值改了，README:152 的「拦截生效」不再是无条件的。这条把差别写进断言：
+  // 同样的项目、同样的调用，只有 mode 不同，结果不同。
+  const ws = makeWorkspace(true);
+  try {
+    const { ctx, listeners } = makeCtx({ workspace: ws });
     apply(ctx, {});
     const { decision } = await firePre(listeners, 'write', { file_path: 'stages/p1/a.md' });
-    assert(decision.kind === 'deny', '有 marker 时应拦');
-    return '成立';
+    assert(decision.kind === 'allow', '默认 observe 不该拦');
+    const rows = readFileSync(join(ws, 'stages', '_ledger.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    assert(rows.some((r) => r.kind === 'would-block'), '默认模式下必须留下 would-block 记录');
+    return '成立：默认 observe，本可以拦住已入账';
   } finally { rmSync(ws, { recursive: true, force: true }); }
 });
 
@@ -261,7 +306,8 @@ await claimAsync('A:自检', '启动打三行自检日志', async () => {
     const msgs = logs.map(([, m]) => m);
     assert(msgs.some((m) => m.includes('skill provider 已注册')), '缺 skill 自检');
     assert(msgs.some((m) => m.includes('纪律段已挂载')), '缺纪律自检');
-    assert(msgs.some((m) => m.includes('拦截已启用')), '缺拦截自检');
+    // 2026-11-11 D1 裁定后措辞由「拦截已启用」改为「已启用」（默认 mode 是 observe）
+    assert(msgs.some((m) => m.includes('已启用')), '缺启用自检');
     return '成立';
   } finally { rmSync(ws, { recursive: true, force: true }); }
 });
@@ -317,11 +363,16 @@ claim('D:升级', 'README 说明升级后怎么确认成功', () => {
 claim('D:启动日志一致', 'README 里的启动四行与代码实际输出一致', () => {
   const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
   const src = readFileSync(join(ROOT, 'index.js'), 'utf8');
-  // README 声称的四行，关键词应在代码里都能找到
-  for (const key of ['已加载', 'skill provider 已注册', '纪律段已挂载', '拦截已启用']) {
+  // README 声称的四行，关键词应在代码里都能找到。
+  // 2026-11-11 D1 裁定：「拦截已启用」改为「已启用」（默认 mode 是 observe，
+  // 已经不是「拦截」了，日志不能还这么说）。README 那句要等 WP6 统一改，
+  // 所以这里只核代码侧的措辞，README 侧放宽到「已启用」。
+  for (const key of ['已加载', 'skill provider 已注册', '纪律段已挂载']) {
     assert(readme.includes(key), `README 里没写「${key}」这行`);
     assert(src.includes(key), `代码里没有「${key}」这行——文档和实现不一致`);
   }
+  assert(src.includes('已启用'), '代码里没有「已启用」这行');
+  assert(readme.includes('已启用') || readme.includes('拦截已启用'), 'README 里没写启用那行');
   return '四行都对得上';
 });
 

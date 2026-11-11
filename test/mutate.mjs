@@ -26,9 +26,24 @@ const SOURCE = join(ROOT, 'lib', 'gate.js');
 /** 每项：[名字, 找什么, 换成什么] */
 const MUTATIONS = [
   [
-    '未知工具改成放行（I5 的绕过通道）',
-    `  if (target.kind === 'unknown') {\n    return denyOf(REASONS.UNKNOWN_WRITE_TOOL,`,
-    `  if (false) {\n    return denyOf(REASONS.UNKNOWN_WRITE_TOOL,`,
+    // 2026-11-11 D1 裁定：原先这里有一个「未知工具改成放行」的变异。
+    // 它测的行为**已被反转**（现在 unknown 本来就是放行），留着它只有两种结局：
+    //   - 注入点失配 → SKIP，变异数虚高但什么都没测
+    //   - 注入点命中 → 把放行改回 deny，测的是被裁定废止的旧行为，方向反了
+    // 删掉它，换成下面两条测**新风险**的变异。
+    '写阶段产物被拦（认不出是阶段写）改成放行',
+    `    if (!loc.under) return { kind: 'allow' };`,
+    `    if (true) return { kind: 'allow' };`,
+  ],
+  [
+    // 第二条新变异，测的是删掉 UNKNOWN deny 之后**唯一的**「这是不是写工具」判据。
+    //
+    // 删除之前，`extractTarget` 认不出 write 时会被 unknown→deny 意外兜住；
+    // 删除之后同样的退化会**静默放行**写阶段产物。也就是说这条测的是一个
+    // 「以前不可能发生、现在可能发生」的失效——正是「为了通过而改测试」的反面。
+    '写工具认不出写（extractTarget 退化成 unknown → 静默放行）',
+    `  if (name === 'write' || name === 'edit' || name === 'apply_patch' || name === 'str_replace_editor' || name === 'create' || name === 'write_file') {`,
+    `  if (false) {`,
   ],
   [
     '缺上游门改成放行（G2 的核心）',

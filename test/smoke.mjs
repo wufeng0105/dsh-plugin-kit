@@ -11,7 +11,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { apply, name, inject, Config } from '../index.js';
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, existsSync as EXISTS_SYNC } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -186,10 +186,42 @@ test('导出面：Config 是 schemastery Schema（不是普通对象）', () => 
 test('Config 校验：默认值正确填充', () => {
   const r = Config['~standard'].validate({});
   assert.equal(r.issues, undefined, `校验失败：${JSON.stringify(r.issues)}`);
-  assert.equal(r.value.mode, 'enforce');
-  assert.equal(r.value.root, 'stages');
-  assert.equal(r.value.gateFile, 'GATE.json');
-  assert.deepEqual(r.value.allowedTools, []);
+  // 2026-11-11 D1 裁定：默认从 enforce 改为 observe——量出「本可以拦住 N 次」之前不默认拦人。
+  assert.equal(r.value.mode, 'observe');
+  // root 已从配置项移除。但注意：本仓 schemastery **不剥未声明字段**（实测），
+  // 所以 validate 之后 root 仍会透传——真正让配置失效的是 apply() 里硬写 DEFAULT_ROOT。
+  // 「塞了也不生效」由下面的行为断言证明，这里只核声明层面。
+  assert.equal(Config({}).root, undefined, 'root 不该还在 Config 声明里');
+  assert.equal(r.value.gateFile, 'GATE.json', 'gateFile 仍在（配错会报错，不是静默）');
+  assert.ok(Array.isArray(r.value.layout), 'layout 仍在（配错会报错，不是静默）');
+});
+
+test('root 传了也不生效：机制必须恒按 stages 判（配错不能静默放行）', async () => {
+  // 真机风险：root 配错时 locateStage 认不出阶段写入 → decide 返回 allow
+  // → 既不拦也不报错。用户以为有保护，实际全放行。
+  // 这条守卫锁的是「apply 不读 config.root」这个决定。
+  const ws = makeWorkspace();
+  const { ctx, listeners } = makeCtx({ workspace: ws });
+  apply(ctx, { mode: 'enforce', root: 'my-stages' }); // 故意传一个错的 root
+  const { decision } = await firePreExecute(listeners, mkExec('write', { file_path: 'stages/p1/a.md' }));
+  assert.equal(
+    decision.kind,
+    'deny',
+    'root 配了 my-stages，但机制必须仍按 stages 判定；allow 意味着「配错即静默放行」',
+  );
+  assert.equal(decision.info.code, 'GATE_MISSING');
+});
+
+test('Config 校验：allowedTools 已从 Config 消失', () => {
+  // 它是「未知工具 deny」的逃生门。deny 没了，逃生门也没有存在意义。
+  //
+  // 注意：这里**不能**断言「硬塞的 allowedTools 会被剥掉」——实测本仓的 schemastery
+  // 把未声明字段原样透传（`validate({junkField:1})` 的 value 里 junkField 还在）。
+  // 所以「消失」只能断言「声明层面没有了」，而「塞了也没用」由行为断言证明——
+  // 见下方「拦截：allowedTools 配置项已消失」。
+  assert.equal(Config({}).allowedTools, undefined, 'allowedTools 不该还在 Config 里');
+  assert.ok('mode' in Config({}), '对照组：mode 仍在——否则这条断言可能因为 schema 整个空而空真');
+  assert.ok('gateFile' in Config({}), '对照组：gateFile 仍在');
 });
 
 test('Config 校验：mode 只接受 observe / enforce', () => {
@@ -215,21 +247,34 @@ test('disabled：enabled=false 时不注册任何监听器', () => {
 });
 
 // ---------------------------------------------------------------- 拦截真的生效
+//
+// 2026-11-11 D1 裁定把默认模式改成 observe 之后，**「拦截生效」的用例必须显式写
+// mode: 'enforce'**。这不是把断言放松了，恰恰相反：默认值变了，凡是断言「被拦」的
+// 地方都得先说明「这个项目主动选择了拦」。之前它们靠默认值侥幸成立，现在靠声明。
 
-test('拦截：缺上游门时，写 p1 产物被 deny', async () => {
+test('拦截（enforce）：缺上游门时，写 p1 产物被 deny', async () => {
   const { ctx, listeners } = makeCtx();
-  apply(ctx, {});
+  apply(ctx, { mode: 'enforce' });
   const { decision } = await firePreExecute(listeners, mkExec('write', { file_path: 'stages/p1/plan.md' }));
   assert.equal(decision.kind, 'deny');
   assert.equal(decision.info.code, 'GATE_MISSING');
   assert.ok(decision.reason.includes('GATE.json'), '理由要写清怎么补');
 });
 
-test('拦截：上游门是 pass 时，写入放行', async () => {
+test('拦截（默认 observe）：同样的调用在默认配置下不拦，但入账', async () => {
+  // 默认值就是 observe：用户装完包不该先被拦一次才知道机制存在。
+  const { ctx, listeners, logger } = makeCtx();
+  apply(ctx, {}); // 不传 mode，走默认
+  const { decision } = await firePreExecute(listeners, mkExec('write', { file_path: 'stages/p1/plan.md' }));
+  assert.equal(decision.kind, 'allow', '默认模式下不该真的拦');
+  assert.ok(logger.some((l) => l.message.includes('observe')), '默认模式必须留下 observe 痕迹');
+});
+
+test('拦截（enforce）：上游门是 pass 时，写入放行', async () => {
   const { ctx, listeners } = makeCtx({
     files: { 'stages/p0/GATE.json': '{"verdict":"pass"}' },
   });
-  apply(ctx, {});
+  apply(ctx, { mode: 'enforce' });
   const { decision } = await firePreExecute(listeners, mkExec('write', { file_path: 'stages/p1/plan.md' }));
   assert.equal(decision.kind, 'allow');
 });
@@ -247,7 +292,7 @@ test('拦截：读门记录必须传 opts.cwd（真机 bug 回归守卫）', asy
     files: { 'stages/p0/GATE.json': '{"verdict":"pass"}' },
     workspace,
   });
-  apply(ctx, {});
+  apply(ctx, { mode: 'enforce' });
   ctx.fs.resolveCalls.length = 0;
 
   await firePreExecute(listeners, mkExec('write', { file_path: 'stages/p1/plan.md' }));
@@ -274,7 +319,7 @@ test('拦截：marker 在会话中途创建后，下一次调用立即生效（�
     files: { 'stages/p0/GATE.json': '{"verdict":"pass"}' },
     workspace,
   });
-  apply(ctx, {});
+  apply(ctx, { mode: 'enforce' });
 
   // 第一次：没有 marker，应放行
   const first = await firePreExecute(listeners, mkExec('write', { file_path: 'stages/p1/plan.md' }));
@@ -294,11 +339,11 @@ test('拦截：marker 在会话中途创建后，下一次调用立即生效（�
   assert.equal(second.decision.info.code, 'GATE_MISSING');
 });
 
-test('拦截：上游门是 fail 时被 deny', async () => {
+test('拦截（enforce）：上游门是 fail 时被 deny', async () => {
   const { ctx, listeners } = makeCtx({
     files: { 'stages/p0/GATE.json': '{"verdict":"fail"}' },
   });
-  apply(ctx, {});
+  apply(ctx, { mode: 'enforce' });
   const { decision } = await firePreExecute(listeners, mkExec('write', { file_path: 'stages/p1/plan.md' }));
   assert.equal(decision.kind, 'deny');
   assert.equal(decision.info.code, 'GATE_FAILED');
@@ -311,19 +356,28 @@ test('拦截：写源码不被拦（不误伤）', async () => {
   assert.equal(decision.kind, 'allow');
 });
 
-test('拦截：未知工具默认 deny（I5 的绕过通道已堵）', async () => {
+test('拦截：未知工具不再被拦（D1 裁定：不按工具身份判罪）', async () => {
+  // 2026-11-11 前这里断言的是 deny + UNKNOWN_WRITE_TOOL。那个类别整层删除了，
+  // 所以现在断言放行——而且刻意带上 stages 路径，证明「参数里有 stages」不再换来一次拦。
   const { ctx, listeners } = makeCtx();
-  apply(ctx, {});
-  const { decision } = await firePreExecute(listeners, mkExec('mystery_writer', { path: 'stages/p1/a.md' }));
-  assert.equal(decision.kind, 'deny');
-  assert.equal(decision.info.code, 'UNKNOWN_WRITE_TOOL');
-});
-
-test('拦截：allowedTools 里登记后放行', async () => {
-  const { ctx, listeners } = makeCtx();
-  apply(ctx, { allowedTools: ['mystery_writer'] });
+  apply(ctx, { mode: 'enforce' });
   const { decision } = await firePreExecute(listeners, mkExec('mystery_writer', { path: 'stages/p1/a.md' }));
   assert.equal(decision.kind, 'allow');
+});
+
+test('拦截：allowedTools 配置项已消失——塞进来也不会变成放行开关', async () => {
+  // 旧配置是「不想被未知工具拦」的逃生门。门没了，配置也没了。
+  // 这里断言的是：塞一个不存在的配置项进来，行为与不塞完全一样（不被剥成开关）。
+  const withOldConfig = makeCtx();
+  apply(withOldConfig.ctx, { mode: 'enforce', allowedTools: ['mystery_writer'] });
+  const a = await firePreExecute(withOldConfig.listeners, mkExec('mystery_writer', { path: 'stages/p1/a.md' }));
+
+  const without = makeCtx();
+  apply(without.ctx, { mode: 'enforce' });
+  const b = await firePreExecute(without.listeners, mkExec('mystery_writer', { path: 'stages/p1/a.md' }));
+
+  assert.equal(a.decision.kind, b.decision.kind, '旧配置项不该改变行为');
+  assert.equal(a.decision.kind, 'allow');
 });
 
 // ---------------------------------------------------------------- observe 模式
@@ -334,6 +388,24 @@ test('observe 模式：本可以拦住但实际放行，并记 warn', async () =
   const { decision } = await firePreExecute(listeners, mkExec('write', { file_path: 'stages/p1/plan.md' }));
   assert.equal(decision.kind, 'allow', 'observe 不该真的拦');
   assert.ok(logger.some((l) => l.message.includes('observe')), '应留下 observe 日志');
+});
+
+test('observe 模式：本可以拦住就入账一条 would-block（「如果拦」的数据来源）', async () => {
+  // WP3 修了「observe 对 UNKNOWN deny 失效」：那时它既硬拦、又不留 would-block 记录，
+  // 于是没人在 observe 下量得出它。D1 把 observe 变成默认值之后，这条更关键——
+  // 默认模式下「本可以拦住 N 次」是唯一能证明拦截层价值的数据，不能只打日志。
+  const ws = makeWorkspace();
+  const { ctx, listeners } = makeCtx({ workspace: ws });
+  apply(ctx, { mode: 'observe' });
+  await firePreExecute(listeners, mkExec('write', { file_path: 'stages/p1/plan.md' }));
+
+  const ledgerFile = join(ws, 'stages', '_ledger.jsonl');
+  assert.ok(EXISTS_SYNC(ledgerFile), `observe 必须入账，实际没生成 ${ledgerFile}`);
+  const rows = readFileSync(ledgerFile, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  const wouldBlock = rows.filter((r) => r.kind === 'would-block');
+  assert.equal(wouldBlock.length, 1, `应有一条 would-block，实际 ${JSON.stringify(rows)}`);
+  assert.equal(wouldBlock[0].verdict, 'GATE_MISSING');
+  assert.equal(wouldBlock[0].stage, 'p0', '应记下是哪道门本可以拦住');
 });
 
 // ---------------------------------------------------------------- skip 留痕
@@ -358,7 +430,7 @@ test('skip：上游门是 skip 时放行，并记 warn', async () => {
 
 test('自定义 layout：00-需求 → 01-计划', async () => {
   const { ctx, listeners } = makeCtx();
-  apply(ctx, { layout: ['00-需求', '01-计划'] });
+  apply(ctx, { mode: 'enforce', layout: ['00-需求', '01-计划'] });
   const { decision } = await firePreExecute(listeners, mkExec('write', { file_path: 'stages/01-计划/plan.md' }));
   assert.equal(decision.kind, 'deny');
   assert.equal(decision.info.code, 'GATE_MISSING');
@@ -380,7 +452,7 @@ test('waterfall 纪律：放行时必须调 next', async () => {
 test('waterfall 纪律：deny 时不调 next（由我们接管）', async () => {
   const ws = makeWorkspace();
   const { ctx, listeners } = makeCtx({ workspace: ws });
-  apply(ctx, {});
+  apply(ctx, { mode: 'enforce' });
   const { calledNext } = await firePreExecute(listeners, mkExec('write', { file_path: 'stages/p1/plan.md' }));
   assert.equal(calledNext, false);
 });
@@ -390,7 +462,7 @@ test('waterfall 纪律：deny 时不调 next（由我们接管）', async () => 
 test('子代理：全局注册，所有 agent 的调用都走同一个监听器', async () => {
   const ws = makeWorkspace(); // 有 marker，拦截生效
   const { ctx, listeners } = makeCtx({ workspace: ws });
-  apply(ctx, {});
+  apply(ctx, { mode: 'enforce' });
   const handlers = listeners.get('tools/pre-execute');
   assert.equal(handlers.length, 1, '只注册一次（全局），不是 per-agent');
 
@@ -506,19 +578,24 @@ test('A 阶段：启动时打三行自检日志（skill / 纪律 / 拦截）', (
   const messages = logger.map((l) => l.message);
   const hasSkill = messages.some((m) => m.includes('skill provider 已注册'));
   const hasSection = messages.some((m) => m.includes('纪律段已挂载'));
-  const hasGate = messages.some((m) => m.includes('拦截已启用'));
+  // 2026-11-11 D1 裁定后措辞由「拦截已启用」改为「已启用」——默认 mode 是 observe，
+  // 已经不是「拦截」了，日志不能还这么说。
+  const hasGate = messages.some((m) => m.includes('已启用'));
   assert.ok(hasSkill, `缺 skill 自检日志，实际：${JSON.stringify(messages)}`);
   assert.ok(hasSection, '缺纪律段自检日志');
-  assert.ok(hasGate, '缺拦截自检日志');
+  assert.ok(hasGate, '缺启用自检日志');
 });
 
-test('A 阶段：拦截自检日志里带出关键配置值', () => {
+test('A 阶段：自检日志里带出关键配置值', () => {
   const ws = makeWorkspace();
   const { ctx, logger } = makeCtx({ workspace: ws });
-  apply(ctx, { root: 'my-stages', mode: 'observe', gateFile: '_GATE.json' });
-  const gateLog = logger.map((l) => l.message).find((m) => m.includes('拦截已启用'));
+  apply(ctx, { mode: 'observe', gateFile: '_GATE.json' });
+  const gateLog = logger.map((l) => l.message).find((m) => m.includes('已启用'));
   assert.ok(gateLog !== undefined);
-  assert.match(gateLog, /root=my-stages/, '要能看到 root');
+  // root 已不是配置项，日志里仍应带出实际使用的值（恒为 stages），
+  // 让用户能确认「机制在看哪个目录」。
+  assert.match(gateLog, /root=stages/, '要能看到实际使用的 root');
+  assert.match(gateLog, /gateFile=_GATE\.json/, 'gateFile 可配，要能看到');
   assert.match(gateLog, /mode=observe/, '要能看到 mode');
   assert.match(gateLog, /gateFile=_GATE\.json/, '要能看到 gateFile');
 });
@@ -554,7 +631,7 @@ test('B 阶段：Config 里真的有 layout 字段（曾缺失导致用户配置
 test('B 阶段：layout 传进 apply 后真的生效', async () => {
   const ws = makeWorkspace();
   const { ctx, listeners } = makeCtx({ workspace: ws });
-  apply(ctx, { layout: ['00-需求', '01-计划'] });
+  apply(ctx, { mode: 'enforce', layout: ['00-需求', '01-计划'] });
   // 用自定义 layout 的目录名写，应被识别为已知阶段
   const { decision } = await firePreExecute(listeners, mkExec('write', { file_path: 'stages/01-计划/plan.md' }));
   assert.equal(decision.kind, 'deny', '应识别 01-计划 为已知阶段并因缺门而拦');
@@ -564,7 +641,7 @@ test('B 阶段：layout 传进 apply 后真的生效', async () => {
 test('B 阶段：layout 默认空数组时用九阶段', async () => {
   const ws = makeWorkspace();
   const { ctx, listeners } = makeCtx({ workspace: ws });
-  apply(ctx, {});
+  apply(ctx, { mode: 'enforce' });
   const { decision } = await firePreExecute(listeners, mkExec('write', { file_path: 'stages/p1/plan.md' }));
   assert.equal(decision.info.code, 'GATE_MISSING', '默认九阶段里应有 p1');
 });
@@ -591,7 +668,8 @@ test('日志规范：启动四行齐全（含版本号 + cwd）', async () => {
   assert.ok(msgs.some((m) => m.includes('cwd=')), '缺 cwd');
   assert.ok(msgs.some((m) => m.includes('skill provider 已注册')), '缺 skill 自检');
   assert.ok(msgs.some((m) => m.includes('纪律段已挂载')), '缺纪律自检');
-  assert.ok(msgs.some((m) => m.includes('拦截已启用')), '缺拦截自检');
+  // 2026-11-11 D1 裁定后措辞由「拦截已启用」改为「已启用」（默认 mode 是 observe）
+  assert.ok(msgs.some((m) => m.includes('已启用')), '缺启用自检');
 });
 
 test('日志规范：拦截被禁用是 warn 不是 info', async () => {
