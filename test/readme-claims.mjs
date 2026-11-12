@@ -632,6 +632,56 @@ claim('N3:SKILL', 'SKILL.md 不再声称「门不必再人工开了 / 机械拦�
   return '旧定位已删，台账定位在';
 });
 
+claim('N4:enforce-未验证', 'README 把 mode:enforce 标为「未验证」，不当地一条正常采用路径卖', () => {
+  // 2026-11-11 通读（ytcw）发现的取舍：enforce 修好 skip 漏洞后「可能」有用，
+  // 但从未在真机验证过值得用——上次它在真实开发里拦 17 次，0 次针对产品代码。
+  // 路线 A：保留它，但文档必须标明未验证，否则又变成一次撒谎。
+  const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
+  assert(/mode: `?enforce`?/.test(readme), 'README 完全不提 enforce 了——应在「未验证」前提下保留');
+  assert(/未验证/.test(readme), 'README 提了 enforce 但没标「未验证」——那是在卖一个没验过的东西');
+  return '标了未验证';
+});
+
+claim('N4:骨架文件数', 'README 说骨架 6 个文件，与 template/ 实际一致', () => {
+  // 通读时核过：template/ 是 6 个（含 .stage-gate.json 与 stages/p0/.gitkeep）
+  const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
+  const m = /骨架（(\d+) 个文件/.exec(readme);
+  assert(m !== null, 'README 找不到骨架文件数（格式变了就更新本断言）');
+  const dir = join(SKILL_DIR, 'template');
+  let n = 0;
+  (function walk(d) {
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      if (e.isDirectory()) walk(join(d, e.name));
+      else n += 1;
+    }
+  })(dir);
+  assert(Number(m[1]) === n, `README 说 ${m[1]} 个，实际 ${n} 个`);
+  return n + ' 个一致';
+});
+
+claim('N4:表格完整性', 'README 每行表格都是合法表格行（防两行并成一行）', () => {
+  // 通读时发现 `enabled` 和 `mode` 两行被并成了一行：
+  //   `| \`enabled\` | \`true\` | ...生效 || \`mode\` | \`observe\` | ...`
+  // Markdown 会把它渲染成一行五格，`mode` 那一行整条消失。这类错 grep 单个词抓不到。
+  //
+  // 判法：合法表格行里，单元格之间是「一个竖线 + 空白」；**出现连续两个竖线**
+  // （`||` 或 `| |` 之间有内容紧邻）就意味着两行被缝在了一起。
+  // 例外：`| |` 在最左（空表头）是合法的，所以只看竖线后面紧跟另一个竖线且**左侧已有内容**的情况。
+  const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
+  const lines = readme.split('\n');
+  const bad = [];
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i].replace(/\r$/, '');
+    if (!l.trimStart().startsWith('|')) continue;
+    // 分隔行（| --- | --- |）跳过
+    if (/^\s*\|[\s:|-]+\|\s*$/.test(l)) continue;
+    // 行中间出现 `||`（两竖线紧邻）—— 合法表格不会有
+    if (/\|\|/.test(l)) bad.push(i + 1);
+  }
+  assert(bad.length === 0, `这些行疑有两行表格被缝在一起：L${bad.join(', L')}`);
+  return '无粘连';
+});
+
 claim('N3:ledger-attach', 'index.js 真的调用了 ledger.attach()（它曾是零调用的死代码）', () => {
   // 依据：`lib/ledger.js:98` 定义 attach，`index.js` 调用 0 次 →
   // createLedger 里的 unit 恒为 null，storage 分支永不执行，loadAll 一次没跑过。
