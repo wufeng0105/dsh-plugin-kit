@@ -1,0 +1,7 @@
+{
+  "stage": "p3.5",
+  "verdict": "pass",
+  "by": "agent",
+  "at": "2026-11-13T04:40:00+08:00",
+  "reason": "一次性 profile pk-p35-verify 四步走完（建/装/验/拆）：dump-config 含 plugin-kit 行、web boot 200、启动零失败信号、装机路径 preflight/recheck self-test 全过（L1）。A8 观察项①③ 已验，② 内容已验复述未测（如实标注）。desktop 意外安装已回退，四文件哈希漂移 0/4。一次性 profile 已删。"
+}
