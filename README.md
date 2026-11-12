@@ -76,9 +76,10 @@ dsh-plugin-kit/
 │   ├── template/            新插件项目骨架（4 文件）
 │   ├── assets/              触点清单 / 宿主快照样例
 │   └── host-skills/         dsh-doc 副本（rc.2 逐字节）+ VERSION.json
-├── scripts/reextract.mjs    asar 解析与重解（--check / --self-test）
+├── scripts/reextract.mjs    asar 解析与重解（--check / --self-test；只在源码仓，不随 npm 包分发）
 ├── CONTEXT.md               词汇表（含退役词清单）
-├── docs/adr/                决策记录（重定义 / 拦截废弃 / 台账搁置）
+├── docs/                    reviewer.md（本仓开发纪律）+ adr/（三个决策记录）
+├── evidence/                凭据：裁定书、真机存证、重定义验收记录、探针脚本
 └── test/                    全部验证入口见 npm run check
 ```
 
@@ -89,8 +90,10 @@ dsh-plugin-kit/
 | `README.md`（本文件） | 这个包是什么、怎么装、怎么用 |
 | [`CONTEXT.md`](CONTEXT.md) | 词汇表：现行词与退役词 |
 | [`docs/adr/`](docs/adr/) | 三个重大决策及其依据 |
+| [`docs/reviewer.md`](docs/reviewer.md) | 审查员协议——本仓自身的开发纪律（不随 npm 包分发） |
 | [`skills/plugin-kit/SKILL.md`](skills/plugin-kit/SKILL.md) | 判据正文（装进宿主的就是它） |
-| [`CHANGELOG.md`](CHANGELOG.md) | 版本历史（含 2026-11-13 重定义） |
+| [`CHANGELOG.md`](CHANGELOG.md) | 版本历史（0.2.0 重定义 + 0.1.x 事故出处表） |
+| [`evidence/`](evidence/README.md) | 凭据：主张引用的原始报告与实测记录 |
 
 **跨文档引用按名不按号。**
 
