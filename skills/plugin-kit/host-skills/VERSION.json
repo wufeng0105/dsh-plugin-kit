@@ -1,5 +1,6 @@
 {
-  "dsh": "0.2.2-rc.1",
-  "extractedAt": "2026-11-10T19:35:00+08:00",
-  "source": "app.asar/dsh/node_modules/@deepseek-ai/dsh-agent-preset/skills"
+  "dsh": "0.2.2-rc.2",
+  "extractedAt": "2026-11-12T18:03:13.285Z",
+  "source": "app.asar/dsh/node_modules/@deepseek-ai/dsh-agent-preset/skills（rc.2 起四份旧 skill 已合并为 dsh-doc）",
+  "asarBytes": 208137981
 }

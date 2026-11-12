@@ -1,64 +1,30 @@
-# 读这几份文档之前：路径基准不是同一个
+# 读 dsh-doc 副本之前：路径基准
 
-> 这一行是 `plugin-kit` 加的，**不是宿主原文**。原文一字未改。
+> 这一行是 `plugin-kit` 加的，**不是宿主原文**。`dsh-doc/` 内所有文件是宿主原文的逐字节副本。
 
-## 问题
+## 问题（与 rc.1 时代相同，对象换成 dsh-doc）
 
-宿主把这些 skill 的 `resourceBase` 报成**父级目录**：
-
-```
-Base directory for this skill: <包>/skills/plugin-kit
-```
-
-但那 4 份文档的正文里，相对路径是**相对它们各自的目录**写的：
-
-```
-host-skills/cordis-plugin-development/SKILL.md 里写  references/practices.md
-                  ↓ 真实位置
-host-skills/cordis-plugin-development/references/practices.md
-
-                  ↓ 但宿主报的 base 是 skills/plugin-kit/
-skills/plugin-kit/references/practices.md   ← 不存在
-```
-
-**照宿主的规则解析，23 处反引号路径全部指向不存在的文件。**
-
-## 正确读法
-
-**看到反引号里的 `references/xxx`、`templates/xxx`、`locale/xxx`，按下面补全：**
+宿主把 `dsh-doc` 的 `resourceBase` 报成**宿主安装内它自己的目录**（app.asar 内路径），而本目录这份副本在 `host-skills/dsh-doc/`。正文里 32 处反引号相对路径（`references/xxx`、`templates/xxx`）按**副本所在目录**解析才能命中。
 
 | 你在读哪份 | 正文里的 `references/x` 实际指 |
 |---|---|
-| `host-skills/cordis-plugin-development/` | `host-skills/cordis-plugin-development/references/x` |
-| `host-skills/cordis-composition-reference/` | `host-skills/cordis-composition-reference/references/x` |
-| `host-skills/editing-cordis-compositions/` | 该目录下（无子引用） |
-| `host-skills/agent-experience/` | 该目录下（无子引用） |
+| `host-skills/dsh-doc/SKILL.md` | `host-skills/dsh-doc/references/x` |
+| 本目录其他任何文件 | 相对**它自己所在目录** |
 
-**也就是：相对路径的基准是「你正在读的那份 SKILL.md 所在目录」，不是宿主报的 base。**
+**也就是：相对路径的基准是「你正在读的那个文件所在目录」，不是宿主报的 base，也不是 `host-skills/` 根。**
 
 ## 为什么不在原文里改
 
-**因为原文是宿主文档的逐字节副本。** 改了：
+**因为 `dsh-doc/` 是宿主文档的逐字节副本。** 改了：与 DSH 升级后的原文 diff 失效、无法回答「宿主原文怎么写的」、重解脚本的「逐字节一致」失去意义。所以用这个文件在外层说明，原文保持可校验。
 
-- 与 DSH 升级后的原文 diff 会失效
-- 无法再回答「宿主原文怎么写的」
-- `VERSION.json` 的「逐字节一致」失去意义
+## 自动检查为何不覆盖这里
 
-**所以用这个文件在外层说明，原文保持可校验。**
+`test/packed.mjs` 检查的是 `plugin-kit/SKILL.md` 里的相对链接。`dsh-doc/SKILL.md` 的 32 处引用全是反引号路径、0 条 markdown 链接——失效方式是「反引号路径被按错基准解析」，靠本文件说明，不靠自动检查。
 
-## 哪些文档受影响
+## 数量随版本变
 
-| 文档 | 反引号相对路径数 |
-|---|---|
-| `cordis-plugin-development/SKILL.md` | **22** |
-| `cordis-composition-reference/SKILL.md` | 1（`references/packages.md`） |
-| `editing-cordis-compositions/SKILL.md` | 0 |
-| `agent-experience/SKILL.md` | 0 |
+上一版（rc.1 四份）是 23 处；本版（rc.2 dsh-doc）是 32 处。**这个数字随宿主升级变化，不要把它写成断言常量**——重解后用正则现数：
 
-**markdown 链接（`[文字](路径)`）四份都是 0 条**——所以不会误触 `plugin-kit` 自己的链接检查。
-
-## 对应的 markdown 链接检查为何不管这里
-
-`test/packed.mjs` 检查的是 **`plugin-kit/SKILL.md` 里**的相对链接必须进 tarball。
-
-**这 4 份没有 markdown 链接，所以那条检查对它们无效**——它们的失效方式是「反引号路径被按错基准解析」，靠这个文件说明，不靠自动检查。
+```powershell
+([regex]::Matches((Get-Content skills\plugin-kit\host-skills\dsh-doc\SKILL.md -Raw), '`(references|templates)/[^`]+`')).Count
+```
