@@ -82,7 +82,12 @@ try {
 
   // 7. marker 可解析
   const marker = JSON.parse(readFileSync(join(proj, '.stage-gate.json'), 'utf8'));
-  ok(marker.enabled === true && marker.root === 'stages', '.stage-gate.json 启用阶段门');
+  // 2026-11-12 审计改：原先是 `marker.enabled === true && marker.root === 'stages'`。
+  // root 已从配置砍掉（readMarker 不读它），所以断言改成「只有 enabled，不许有 root」。
+  ok(
+    marker.enabled === true && marker.root === undefined,
+    '.stage-gate.json 只有 enabled，没有废弃的 root',
+  );
 
   // 清理 tgz
   rmSync(tgz, { force: true });

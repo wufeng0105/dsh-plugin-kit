@@ -47,7 +47,7 @@
     "instrument": "node --test test/instrument.test.mjs",
     "claims": "node test/readme-claims.mjs",
     "failures": "node test/failure-signals.mjs",
-    "mutate": "node test/mutate.mjs && node test/mutate-pack.mjs && node test/mutate-instrument.mjs",
+    "mutate": "node test/mutate.mjs && node test/mutate-pack.mjs && node test/mutate-instrument.mjs && node test/mutate-template.mjs",
     "check": "node --check index.js && node --check lib/gate.js && node --check lib/ledger.js && node --check lib/skill-provider.js && node --check lib/discipline.js && npm test && npm run packed && npm run template && npm run template-e2e && npm run selfcontained && npm run smoke && npm run realhost && npm run instrument && npm run claims && npm run failures && npm run mutate",
     "realhost": "node test/real-host-check.mjs"
   },
