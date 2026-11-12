@@ -1,8 +1,8 @@
 {
   "name": "@wufeng0105/dsh-plugin-kit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
-  "description": "DSH 插件开发流程：判据（skill）+ 常驻纪律（systemPrompt 段）+ 一条不拦路的台账（记录每个阶段做过什么、审查是谁在什么上下文里做的）。",
+  "description": "DSH 插件开发的契约查证与完成验证：查宿主契约的三步顺序、四大失败家族的首装自检脚本、升级后的触点复检，随宿主版本保鲜。",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -15,8 +15,9 @@
     "plugin",
     "bundle",
     "skill",
-    "stage-gate",
-    "reviewer"
+    "preflight",
+    "recheck",
+    "touchpoints"
   ],
   "icon": "icon.svg",
   "exports": {
@@ -27,29 +28,23 @@
   "files": [
     "index.js",
     "lib",
-    "vendor",
     "skills",
     "cordis.patch.yml",
     "locale/*.json",
     "icon.svg",
     "README.md",
     "CHANGELOG.md",
-    "LOGGING.md",
     "LICENSE"
   ],
   "scripts": {
-    "test": "node --test test/gate.test.mjs test/ledger.test.mjs test/skill-provider.test.mjs",
+    "test": "node --test test/skill-provider.test.mjs test/preflight.test.mjs",
     "packed": "node --test test/packed.mjs",
     "template": "node --test test/template.mjs",
     "template-e2e": "node test/template-e2e.mjs",
     "selfcontained": "node test/selfcontained.mjs",
-    "smoke": "node --test test/smoke.mjs",
-    "instrument": "node --test test/instrument.test.mjs",
     "claims": "node test/readme-claims.mjs",
-    "failures": "node test/failure-signals.mjs",
-    "mutate": "node test/mutate.mjs && node test/mutate-pack.mjs && node test/mutate-instrument.mjs && node test/mutate-template.mjs",
-    "check": "node --check index.js && node --check lib/gate.js && node --check lib/ledger.js && node --check lib/skill-provider.js && node --check lib/discipline.js && npm test && npm run packed && npm run template && npm run template-e2e && npm run selfcontained && npm run smoke && npm run realhost && npm run instrument && npm run claims && npm run failures && npm run mutate",
-    "realhost": "node test/real-host-check.mjs"
+    "mutate": "node test/mutate-pack.mjs && node test/mutate-template.mjs && node test/mutate-preflight.mjs",
+    "check": "node --check index.js && node --check lib/skill-provider.js && node --check skills/plugin-kit/scripts/preflight.mjs && node --check skills/plugin-kit/scripts/recheck.mjs && node --check scripts/reextract.mjs && npm test && npm run packed && npm run template && npm run template-e2e && npm run selfcontained && npm run claims && npm run mutate"
   },
   "dsh": {
     "bundle": {
@@ -58,6 +53,6 @@
   },
   "engines": {
     "node": ">=20.3.0",
-    "dsh": ">=0.2.1-rc.1 <0.3.0-0"
+    "dsh": ">=0.2.2-rc.1 <0.3.0-0"
   }
 }

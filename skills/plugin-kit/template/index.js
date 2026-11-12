@@ -22,5 +22,6 @@ export const name = 'my-plugin';
 export const inject = [];
 
 export function apply(ctx, config) {
-  ctx.logger.info('[my-plugin] loaded');
+  const sink = typeof ctx.logger?.info === 'function' ? ctx.logger.info.bind(ctx.logger) : undefined;
+  if (sink !== undefined) sink('[my-plugin] loaded');
 }

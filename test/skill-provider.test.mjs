@@ -15,7 +15,6 @@ import {
   DESCRIPTION_LIMIT,
   PACKAGED_SKILL_RANK,
 } from '../lib/skill-provider.js';
-import { SECTION_NAME, SECTION_ORDER, DISCIPLINE_TEXT } from '../lib/discipline.js';
 
 /** 测试建的临时目录统一登记，进程退出时清理（防止 TEMP 堆积）。 */
 const WORKSPACES = [];
@@ -223,38 +222,9 @@ test('readSkill: locator 形状坏返回 undefined，不抛', async () => {
   assert.equal(await readSkill({ root: '/tmp', provider: 'plugin-kit', locator: {} }), undefined);
 });
 
-// ---------------------------------------------------------------- 纪律段
+// （纪律段相关测试已随 lib/discipline.js 退役删除——ADR 0001。）
 
-test('DISCIPLINE_TEXT: 是条件句，不是无条件断言', () => {
-  // 审计 I1：非插件项目里不能出现假指令
-  assert.match(DISCIPLINE_TEXT, /如果/, '必须以条件句开头');
-  assert.match(DISCIPLINE_TEXT, /\.stage-gate\.json/, '必须说明判断依据');
-  assert.match(DISCIPLINE_TEXT, /忽略本段/, '必须给出不相关时的处理方式');
-});
-
-test('DISCIPLINE_TEXT: 第一条是「去加载判据」', () => {
-  // 审计 I5：最需要说服的动作要排第一
-  const firstItem = DISCIPLINE_TEXT.split('\n').find((l) => l.trim().startsWith('1.'));
-  assert.ok(firstItem !== undefined, '应有第 1 条');
-  assert.match(firstItem, /plugin-kit/, '第 1 条应指向 skill');
-});
-
-test('DISCIPLINE_TEXT: 不注入 skill 全文（长度可控）', () => {
-  assert.ok(DISCIPLINE_TEXT.length < 800, `纪律段应短小，实际 ${DISCIPLINE_TEXT.length} 字符`);
-});
-
-test('DISCIPLINE_TEXT: 明写权威源，不复述门规则', () => {
-  assert.match(DISCIPLINE_TEXT, /唯一的判据来源|不复述/, '应声明权威源在 skill 里');
-});
-
-test('SECTION_ORDER 是有限数', () => {
-  assert.equal(typeof SECTION_ORDER, 'number');
-  assert.ok(Number.isFinite(SECTION_ORDER));
-});
-
-test('SECTION_NAME 带命名空间前缀', () => {
-  assert.match(SECTION_NAME, /^plugin-kit:/);
-});
+// （SECTION_NAME / SECTION_ORDER 相关断言已随 lib/discipline.js 退役删除——ADR 0001。）
 
 // ---------------------------------------------------------------- 打包的 skill（真文件）
 
@@ -296,12 +266,13 @@ test('skill 自足：包内 skills/plugin-kit 的引用文件全部存在', () =
   const skillDir = join(PACKAGED_SKILLS, 'plugin-kit');
   const skillMd = readFileSync(join(skillDir, 'SKILL.md'), 'utf8');
 
-  // 抓 SKILL.md 里所有 markdown 相对链接：](path)
-  const links = [...skillMd.matchAll(/\]\(([^)#][^)]*)\)/g)]
+  // 抓 SKILL.md 里所有 markdown 相对链接 + 反引号路径引用（新 SKILL.md 用反引号指路）
+  const mdLinks = [...skillMd.matchAll(/\]\(([^)#][^)]*)\)/g)]
     .map((m) => m[1])
     .filter((href) => !/^[a-z]+:/i.test(href)); // 排除 http: / https:
-
-  assert.ok(links.length > 0, 'SKILL.md 里一个相对链接都没有——解析器或文档出问题了');
+  const backtickRefs = [...skillMd.matchAll(/`((?:template|scripts|assets|host-skills)\/[a-zA-Z0-9_\-./]+\.(?:mjs|md|json|yml))`/g)].map((m) => m[1]);
+  const links = [...mdLinks, ...backtickRefs];
+  assert.ok(links.length > 0, 'SKILL.md 里一个引用都没有——解析器或文档出问题了');
 
   const missing = [];
   for (const href of links) {
@@ -310,24 +281,17 @@ test('skill 自足：包内 skills/plugin-kit 的引用文件全部存在', () =
   }
   assert.deepEqual(missing, [], `SKILL.md 引用了包里不存在的文件：${JSON.stringify(missing)}`);
 
-  // host-skills 是 2026-11-10 新增的宿主文档副本，必须在包里且可读。
+  // host-skills 是宿主文档副本（2026-11-13 重解为 dsh-doc），必须在包里且可读。
   const hostSkills = join(skillDir, 'host-skills');
   assert.ok(existsSync(hostSkills), 'host-skills/ 不在包内——宿主文档副本丢了');
   assert.ok(
     existsSync(join(hostSkills, 'VERSION.json')),
     'host-skills/VERSION.json 缺失，无法判断副本是否过期',
   );
-  for (const name of [
-    'cordis-plugin-development',
-    'cordis-composition-reference',
-    'editing-cordis-compositions',
-    'agent-experience',
-  ]) {
-    assert.ok(
-      existsSync(join(hostSkills, name, 'SKILL.md')),
-      `host-skills/${name}/SKILL.md 缺失`,
-    );
-  }
+  assert.ok(
+    existsSync(join(hostSkills, 'dsh-doc', 'SKILL.md')),
+    'host-skills/dsh-doc/SKILL.md 缺失（rc.2 起宿主文档唯一入口）',
+  );
 });
 
 // ---------------------------------------------------------------- SkillDefinition 完整性（真机踩过的 bug）

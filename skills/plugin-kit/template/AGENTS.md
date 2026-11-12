@@ -1,77 +1,41 @@
 # AGENTS.md
 
-> 本项目是一个 DSH 插件。**骨架已就位，功能未定**——功能定了之后，先把 P0 需求写清楚，再动代码。
+> 本项目是一个 DSH 插件。**骨架已就位，功能未定**——功能定了之后，先把需求写清楚，再动代码。
 >
-> **「就位」在这里有明确的完成条件，不是「文件已创建」**：`node --check` 和 `npm pack` 全绿也**证明不了它装得上**——那是本流程的头号失败模式。判定它真的就位，只有一条：装一次，读返回里的 `application`。
+> **「就位」在这里有明确的完成条件，不是「文件已创建」**：`node --check` 和 `npm pack` 全绿也**证明不了它装得上**。判定它真的就位，只有两条：①`preflight` 零 FAIL；②装一次，读返回里的 `application`。
 
 ## 开工前
 
-1. **用 `skill` 工具加载 `plugin-kit`**。判据在那里，本文不复述。
-2. 查宿主契约，读 `plugin-kit` 包里的 `host-skills/`（**位置见 `plugin-kit` 的 `SKILL.md`「宿主领域知识在哪」——它会报出绝对路径**）：
-   - 写 Host 半 / slot / Config / 抄模板 → `cordis-plugin-development/`
-   - 写 patch / preset / 查有哪些插件包可装 → `cordis-composition-reference/`
-   - 做 agent preset / composition → `editing-cordis-compositions/`
-   - 设计模型可见的工具描述 → `agent-experience/`
-3. **先读那个目录下的 `PATHS-README.md`**。那 4 份文档里的 `references/xxx` 是相对**它们各自目录**写的，不是相对 `plugin-kit` 的 base directory。照 base 解析会落到 23 处不存在的文件。
+1. **用 `skill` 工具加载 `plugin-kit`**。查契约的三步顺序、完成验证、升级保鲜都在那里，本文不复述。
+2. 查宿主契约：**`cordis_inspect_query` 是权威源**（Service / Event / Config / Tools / Slots），文档副本 `host-skills/dsh-doc/`（在 plugin-kit 包里）讲机制原则，真实运行的同类插件源码讲装配。
+3. 每条关于宿主的断言必须带出处（探测命令+返回，或安装包 `文件:行`）。
 
-> 注意：`host-skills/` **不在本项目里**，在 `plugin-kit` 包里。本项目只有 6 个骨架文件。
-
-## 查不到答案时的顺序
-
-1. `cordis_inspect_query` —— 答「有什么方法 / 什么事件 / 什么 slot」
-2. **它答不了「怎么组合起来能用」** —— catalog 只给零件，不给装配图
-3. `grep` 上面那个 `host-skills/` 目录 —— 装配图在文档里
-4. **还不够 → 找一个真实运行的同类型插件，读它的源码**
-   在 `~\.dsh\profiles\<profile>\node_modules\` 下找。
-   **这条最有效，但最容易忘**——一次真实开发里翻了两百多次 catalog 和源码都没答案，
-   最后是读一个已发布插件的源码才找到接缝。
-
-**顺带记一条**：省上下文只有在它没有引起更多搜索、重复读取或错误时才划算。**查得太多本身就是错。**
-
-## 最常踩的五条
+## 最常踩的六条
 
 1. **每条验收必须能判真假**；靠人看的必须给机判替代，否则标「人工判读」。
-2. **每条关于宿主的断言必须带出处**（探测命令+返回，或安装包 `文件:行`）。
-3. **每阶段结束开一个独立审查员**：它不写代码、只读产物、只出三态结论。
-4. **任何检查先证明它会红**，再用它判通过。
-5. **模块存在 ≠ 产品在用**：必须证明它在 import 图里可达。
+2. **每条关于宿主的断言必须带出处**。
+3. **任何检查先证明它会红**，再用它判通过。
+4. **模块存在 ≠ 产品在用**：必须证明它在 import 图里可达。
+5. **「无法判定」不是「通过」**：探测不到就标 `UNVERIFIABLE`，写明证据等级。
+6. **交付说明里的命令必须真跑过。**
 
 ## 本项目的形态
 
 - Host 半；`inject` 目前是空数组
-- 需要宿主服务才往 `inject` 加，**但只加确实存在的**
+- 需要宿主服务才往 `inject` 加，**但只加确实存在的**（inspect 先查）
 - 要配置就用 schemastery 的 `Schema.object(...)`；**不要导出普通的 `Config = {}`**
-
-## 阶段做完时
-
-> 开一个审查员，按 `plugin-kit` 的 `references/process.md` P\<n\> 出口判据审这一版。
-> 需求在 `<需求文件>`，产物在 `<产物目录>`。只读不写，只出三态结论。
-
-**必须是新开的审查员。**同一个会话让它「顺便检查一下」不算。
-
-### 产物必须落在 `stages/<阶段>/` 下
-
-**每一阶段的产物写到 `stages/p0/`、`stages/p1/`… 里，不要写到仓库根或 `docs/`。**
-
-**为什么这条是硬的**：台账只记落在 `stages/` 下的写入。写在别处（`docs/`、仓库根的 `PLAN.md`）**不会进台账，也不会报错**——你会得到一本空台账，而且没有任何信号告诉你「记漏了」。
-
-阶段目录名见 `plugin-kit` 的 `references/process.md`（默认九阶段 `p0 p1 p1.5 p2 p3 p3b p3.5 p4 p5`）。
-事后想知道「这一阶段审过没有」，查 `stages/_ledger.jsonl`（每行带 `runId`），不是查 `GATE.json` 本身。
+- 界面半（client.js）用 `window.__ModuleLoader__.load({ id, factory })` 形态，**不能有 ESM export/import**——宿主把所有插件的 client.js 拼成一个大脚本加载
 
 ## 交付前
 
-- `npm pack` 后从 tarball 真加载一次
-- `files` 与包内文件三方向差集为空
-- 交付说明里的命令全部真跑过
-- **加第一个依赖时**，顺手建 `.gitignore`：`node_modules/`、`*.tgz`、`*.log`。
-  （骨架现在没有依赖，所以还没建——`node_modules` 还不存在，不需要忽略规则。
-  骨架里不能预放 `.gitignore`：npm 打包会排除它，仓库与包就对不上了。）
+1. `node <plugin-kit包>/skills/plugin-kit/scripts/preflight.mjs <项目根>` —— 0 FAIL 才算预检过
+2. `npm pack` 后从 tarball 真加载一次
+3. **加第一个依赖时**，顺手建 `.gitignore`：`node_modules/`、`*.tgz`、`*.log`。（骨架没有依赖，所以还没建。骨架里不能预放 `.gitignore`：npm 打包会排除它，仓库与包就对不上了。）
+4. 升级 DSH 后：跑 `recheck.mjs`（触点复检）+ `reextract.mjs --check`（文档副本过期判定）
 
 ## 不要做
 
 - 不要把「测试全绿」当成「验收通过」
 - 不要把「无法判定」写成「通过」
 - 不要在没跑过的情况下把命令写进交付说明
-- **不要自己创建 `GATE.json`** —— 它是**审查结论的记录**，不是你的交付物。
-  **机制挡不住你**：实测自签 `stages/p0/GATE.json` 会通过，签完它就能签 `p1`。所以这条不是技术约束，是纪律。
-  自己写的后果只有一个——台账里出现一条「审过了」，而实际上没有人审。那比不写更坏：**不写至少诚实。**
+- 不要猜服务名——`inject` 写错一个名字，插件永远 pending，宿主当 web boot 失败

@@ -1,17 +1,18 @@
 // 证明新增的守卫真会红：逐条注入缺陷 → 跑测试 → 必须红 → 复原
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'node:fs';
-import { execSync } from 'node:child_process';
-
-// 仓库根：按本文件位置解析，不写死绝对路径（2026-11-13 修：仓库搬家后写死路径让本测试 ENOENT）。
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+
 const ROOT = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
 
 function run(cmd) {
   try {
-    const out = execSync(cmd, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 180000 });
-    return { ok: true, out };
+    execFileSync('node', cmd.split(' '), {
+      cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 180000,
+    });
+    return { ok: true, out: '' };
   } catch (e) {
-    return { ok: false, out: (e.stdout ?? '') + (e.stderr ?? '') };
+    return { ok: false, out: String(e.stdout ?? '') + String(e.stderr ?? '') };
   }
 }
 
@@ -37,9 +38,9 @@ const results = [];
   });
 }
 
-// ---- 变异 2：把 host-skills 里的一个文件挪走 → packed.mjs 必须红
+// ---- 变异 2：把 dsh-doc 副本里的一个文件挪走 → packed.mjs 必须红
 {
-  const victim = `${ROOT}/skills/plugin-kit/host-skills/cordis-plugin-development/templates/decoration/client.js`;
+  const victim = `${ROOT}/skills/plugin-kit/host-skills/dsh-doc/references/practices.md`;
   const backup = `${victim}.mutbak`;
   let moved = false;
   if (existsSync(victim)) {
@@ -53,27 +54,27 @@ const results = [];
     unlinkSync(backup);
   }
   results.push({
-    name: '删 host-skills 内层文件',
+    name: '删 dsh-doc 内层文件',
     injected: moved,
     red: !r.ok,
     detail: moved ? (r.ok ? '仍绿 ← 空真' : '变红 ✓') : '注入失败',
   });
 }
 
-// ---- 变异 3：SKILL.md 链接一个不存在的文件 → packed.mjs 必须红
+// ---- 变异 3：SKILL.md 引用一个不存在的文件 → packed.mjs 必须红
 {
   const f = `${ROOT}/skills/plugin-kit/SKILL.md`;
   const orig = readFileSync(f, 'utf8');
   const patched = orig.replace(
-    '## 按需读什么',
-    '## 按需读什么\n\n[幽灵文件](references/ghost-does-not-exist.md)\n',
+    '## 二、完成验证',
+    '## 二、完成验证\n\n参见 `scripts/ghost-does-not-exist.mjs`。\n',
   );
   const changed = patched !== orig;
   writeFileSync(f, patched, 'utf8');
   const r = run('node --test test/packed.mjs');
   writeFileSync(f, orig, 'utf8');
   results.push({
-    name: 'SKILL.md 链到包外文件',
+    name: 'SKILL.md 引到包外文件',
     injected: changed,
     red: !r.ok,
     detail: changed ? (r.ok ? '仍绿 ← 空真' : '变红 ✓') : '注入失败',
@@ -102,9 +103,9 @@ const results = [];
   });
 }
 
-// ---- 变异 5：骨架漏一个隐藏文件 → packed.mjs 必须红
+// ---- 变异 5：骨架漏一个本体文件 → packed.mjs 必须红
 {
-  const victim = `${ROOT}/skills/plugin-kit/template/.stage-gate.json`;
+  const victim = `${ROOT}/skills/plugin-kit/template/AGENTS.md`;
   const backup = `${victim}.mutbak`;
   let moved = false;
   if (existsSync(victim)) {
@@ -118,7 +119,7 @@ const results = [];
     unlinkSync(backup);
   }
   results.push({
-    name: '骨架漏 .stage-gate.json',
+    name: '骨架漏 AGENTS.md',
     injected: moved,
     red: !r.ok,
     detail: moved ? (r.ok ? '仍绿 ← 空真' : '变红 ✓') : '注入失败',
@@ -131,5 +132,5 @@ for (const r of results) {
   console.log('  ' + (r.red ? 'RED  ' : 'FAIL ') + r.name.padEnd(30) + r.detail);
   if (!r.red) allRed = false;
 }
-console.log(allRed ? '\n全部变红：新守卫确实在测东西。' : '\n有守卫是空的，需修。');
+console.log(allRed ? '\n全部变红：守卫确实在测东西。' : '\n有守卫是空的，需修。');
 process.exit(allRed ? 0 : 1);

@@ -3,7 +3,48 @@
 本文件记录所有值得注意的变更。
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [未发布]
+## [0.2.0] - 2026-11-13
+
+### 产品重定义：从阶段门到契约查证与完成验证（breaking）
+
+**核心目标变更**（`docs/adr/0001-核心目标重定义.md`）：从「流程门（拦截 + 台账 + 纪律段）」改为「让插件开发者在写代码之前就知道宿主要什么（契约知识），在宣称完成之前就知道要验证什么、怎么验证（可执行验证清单），并随宿主升级持续保鲜」。
+
+#### 删除（全部退役，历史在 git `61f5fa2` 之前）
+
+| 删 | 为什么 | 决策 |
+|---|---|---|
+| 拦截层（`tools/pre-execute` / enforce / GATE_* 理由码） | 17 拦 0 真阳性；fail-open 与 fail-closed 双输 | ADR 0002 |
+| 台账（`lib/ledger.js` / `tools/result` / would-block） | 未验证假设（依赖单作者实验的「AI 伪造」场景）；搁置非否定 | ADR 0003 |
+| 纪律段（`lib/discipline.js` / systemPrompt.section） | 提示可被忽略；判据内容现住 skill 正文 | ADR 0001 |
+| 九阶段判据 references/ | 单作者事故史长出的流程，不当作机制分发；通用纪律收编进新 SKILL.md「开发纪律」节 | ADR 0001 |
+| vendor/（schemastery / cosmokit / config.js） | 无用户配置后不再需要 | 随 0001 |
+
+#### 新增
+
+| 增 | 是什么 |
+|---|---|
+| **`skills/plugin-kit/scripts/preflight.mjs`** | 首装自检：四大失败家族（装不上 / 看不见 / 一加载就崩 / 环境相关）逐条核查，FAIL 附补法；`--self-test` 7 用例证明判定式会红 |
+| **`scripts/reextract.mjs`** | 自研 asar 解析器：`--check` 过期判定（STALE = asar mtime > extractedAt）、一键重解、`--self-test` |
+| **`host-skills/dsh-doc/`（43 文件）** | rc.2 逐字节副本。**rc.1 的四份宿主 skill 已被宿主合并为 dsh-doc 一份**（实测 asar 21682 文件全扫描）；旧副本按 git 归档 |
+| **`CONTEXT.md`** | 词汇表：契约知识 / 验证清单 / 失败家族 / 触点 / 保鲜 / 重解 + 退役词（阶段门 / 纪律段 / marker / 九阶段 / 作证台账） |
+| **`docs/adr/0001-0003`** | 三个重大决策：重定义、拦截废弃、台账搁置（含复活条件） |
+| SKILL.md 重写 | 查契约三步顺序（inspect 权威源 → dsh-doc 副本 → 同类插件源码）+ 失败家族 + 开发纪律六条 |
+
+#### 修复（2026-11-13 早间审计抓到的 4 条不一致，先于重定义）
+
+- 5 个测试文件写死旧仓库路径（搬家后 ENOENT）→ 全部改 `import.meta.url` 相对解析
+- `cordis.patch.yml` 残留 `mode: enforce`（与 D1 裁定冲突、随包分发 enforce）→ 删除，config 留空
+- `index.js` JSDoc 旧包名 → 更正
+- `test/failure-signals.mjs` 头部注释块损坏（代码碎片混入）→ 修复（该文件随后随台账退役删除）
+
+#### 实测依据（L1，2026-11-13 活体宿主）
+
+- DSH `0.2.2-rc.2`；inspect Event 目录含 `fs/write-intent` / `fs/edit-intent` / `fs/delete-intent`（rc.1 副本无记载——升级后契约漂移的直接证据）
+- asar 208,137,981 字节；`@deepseek-ai/dsh-agent-preset/skills/` 下仅存 `dsh-doc`（43 文件）
+- `dsh-skill/lib/index.js` rc.2 源码实读：候选校验新增可选 `whenToUse` / `metadata`；`BUNDLED_SKILL_RANK = 600`
+- client.js ESM 判定式（`new Function(拼接)`）5 用例红绿正确（T3 探针）
+
+## [未发布]（历史条目，重定义前的记录保持原样）
 
 ### 删掉最后两份不属于 GitHub 项目的文档（2026-11-12）
 

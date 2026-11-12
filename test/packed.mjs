@@ -69,14 +69,16 @@ test('打包守卫：skills/ 整个目录必须进包（判据不在包外）', 
 
   for (const required of [
     'skills/plugin-kit/SKILL.md',
-    'skills/plugin-kit/references/process.md',
-    'skills/plugin-kit/references/tools.md',
-    'skills/plugin-kit/references/reviewer.md',
-    'skills/plugin-kit/references/evidence.md',
-    'skills/plugin-kit/references/walkthrough.md',
+    'skills/plugin-kit/scripts/preflight.mjs',
+    'skills/plugin-kit/scripts/recheck.mjs',
     'skills/plugin-kit/assets/touchpoints.sample.json',
     'skills/plugin-kit/assets/host-snapshot.sample.json',
-    'skills/plugin-kit/scripts/recheck.mjs',
+    // host-skills 重解产物（dsh-doc 副本 + 三份元文件）
+    'skills/plugin-kit/host-skills/README.md',
+    'skills/plugin-kit/host-skills/VERSION.json',
+    'skills/plugin-kit/host-skills/PATHS-README.md',
+    'skills/plugin-kit/host-skills/dsh-doc/SKILL.md',
+    'skills/plugin-kit/host-skills/dsh-doc/references/packages.md',
   ]) {
     assert.ok(files.has(required), `包内缺 ${required}——SKILL.md 提到它，用户装完却是死链`);
   }
@@ -114,67 +116,70 @@ test('打包守卫：项目骨架 template/ 的每个文件都必须进包', () 
     `${prefix}cordis.patch.yml`,
     `${prefix}index.js`,
     `${prefix}AGENTS.md`,
-    `${prefix}.stage-gate.json`,
-    `${prefix}stages/p0/.gitkeep`,
   ]) {
     assert.ok(files.has(required), `骨架缺 ${required}——复制出来的项目不完整`);
   }
 });
 
-test('打包守卫：host-skills 的 4 份宿主文档必须整份进包', () => {
+test('打包守卫：host-skills 的宿主文档副本必须整份进包（dsh-doc，rc.2 起）', () => {
   const { files } = packed();
   const prefix = 'skills/plugin-kit/host-skills/';
   const inPack = [...files].filter((p) => p.startsWith(prefix));
 
-  // 审计点名的三个「删掉也全绿」的文件，逐个钉死。
+  // 2026-11-13 重解后副本 = dsh-doc 一份（43 文件，rc.1 的四份已被宿主合并）。
   const must = [
     `${prefix}VERSION.json`,
     `${prefix}README.md`,
-    // cordis-plugin-development
-    `${prefix}cordis-plugin-development/SKILL.md`,
-    `${prefix}cordis-plugin-development/references/practices.md`,
-    `${prefix}cordis-plugin-development/references/host-plugin.md`,
-    `${prefix}cordis-plugin-development/templates/decoration/client.js`,
-    `${prefix}cordis-plugin-development/templates/decoration/package.json`,
-    `${prefix}cordis-plugin-development/templates/decoration/cordis.patch.yml`,
-    `${prefix}cordis-plugin-development/templates/decoration/locale/en.json`,
-    `${prefix}cordis-plugin-development/templates/mcp/cordis.patch.yml`,
-    // cordis-composition-reference
-    `${prefix}cordis-composition-reference/SKILL.md`,
-    `${prefix}cordis-composition-reference/references/packages.md`,
-    // 另外两份
-    `${prefix}editing-cordis-compositions/SKILL.md`,
-    `${prefix}agent-experience/SKILL.md`,
+    `${prefix}PATHS-README.md`,
+    `${prefix}dsh-doc/SKILL.md`,
+    `${prefix}dsh-doc/references/practices.md`,
+    `${prefix}dsh-doc/references/host-plugin.md`,
+    `${prefix}dsh-doc/references/plugin-development.md`,
+    `${prefix}dsh-doc/references/packages.md`,
+    `${prefix}dsh-doc/references/upgrading.md`,
+    `${prefix}dsh-doc/references/composition-reference.md`,
+    `${prefix}dsh-doc/templates/decoration/client.js`,
+    `${prefix}dsh-doc/templates/decoration/package.json`,
+    `${prefix}dsh-doc/templates/mcp/cordis.patch.yml`,
   ];
   for (const f of must) {
     assert.ok(files.has(f), `包内缺 ${f}`);
   }
 
-  // 数量守卫：宿主文档副本的实际文件数由 host-skills/VERSION.json 的 dsh 字段
-  // （当前 0.2.2-rc.1）决定，重解 rc.2 后数量会变——下界 35 只防「整份丢失」。
-  // 精确数量不在这里断言：那是「随宿主升级变化的事实」，写死就会在每次重解时假红。
+  // 数量守卫：dsh-doc 实际文件数随宿主升级变化（当前 43 + 3 元文件）。
+  // 下界 40 只防「整份丢失」；精确数量写死会在每次重解时假红。
   assert.ok(
-    inPack.length >= 35,
-    `host-skills 只有 ${inPack.length} 个文件进包，少于 35（4 份宿主文档的完整副本）`,
+    inPack.length >= 40,
+    `host-skills 只有 ${inPack.length} 个文件进包，少于 40（dsh-doc 完整副本 + 3 元文件）`,
   );
+  // 旧四份目录不许残留在包里（已归档进 git / evidence）
+  for (const legacy of ['cordis-plugin-development/', 'cordis-composition-reference/', 'editing-cordis-compositions/', 'agent-experience/']) {
+    assert.ok(
+      ![...files].some((p) => p.startsWith(prefix + legacy)),
+      `包里还有已归档的旧副本 ${legacy}——重解后应只剩 dsh-doc`,
+    );
+  }
 });
 
-test('打包守卫：判据里的相对链接，指向的文件必须在 tarball 里', () => {
+test('打包守卫：判据里的引用，指向的文件必须在 tarball 里', () => {
   const { files } = packed();
   const skillDirRel = 'skills/plugin-kit';
   const skillMdPath = join(ROOT, skillDirRel, 'SKILL.md');
   assert.ok(existsSync(skillMdPath), 'SKILL.md 不在工作区，本测试无法进行');
 
   const skillMd = readFileSync(skillMdPath, 'utf8');
+  // 两类引用都查：markdown 链接 [x](path) 与反引号路径 `dir/file.ext`
   const hrefs = [...skillMd.matchAll(/\]\(([^)#][^)]*)\)/g)]
     .map((m) => m[1])
     .filter((href) => !/^[a-z][a-z0-9+.-]*:/i.test(href)); // 排除 http: / https: / mailto:
+  const backticks = [...skillMd.matchAll(/`((?:template|scripts|assets|host-skills)\/[a-zA-Z0-9_\-./]+\.(?:mjs|md|json|yml))`/g)].map((m) => m[1]);
+  const all = [...hrefs, ...backticks];
 
-  assert.ok(hrefs.length > 0, 'SKILL.md 里一个相对链接都没有——解析器或文档出问题了');
+  assert.ok(all.length > 0, 'SKILL.md 里一个文件引用都没有——解析器或文档出问题了');
 
   // 关键区别：判断依据是 **tarball 里有**，不是「工作区里有」。
   // 目录链接（以 / 结尾）tarball 里没有条目，判据改成「该目录下至少有一个文件在包里」。
-  const missing = hrefs.filter((href) => {
+  const missing = all.filter((href) => {
     const normalized = `${skillDirRel}/${href}`.replaceAll('\\', '/');
     if (normalized.endsWith('/')) {
       return ![...files].some((p) => p.startsWith(normalized));
@@ -182,7 +187,7 @@ test('打包守卫：判据里的相对链接，指向的文件必须在 tarball
     return !files.has(normalized);
   });
 
-  assert.deepEqual(missing, [], `SKILL.md 链接了这些文件，但它们不在 tarball 里：${JSON.stringify(missing)}`);
+  assert.deepEqual(missing, [], `SKILL.md 引用了这些文件，但它们不在 tarball 里：${JSON.stringify(missing)}`);
 });
 
 // ---------------------------------------------------------------- 证据不进包
@@ -193,20 +198,18 @@ test('打包守卫：evidence/ 与 test/e2e 不进包（证据与真机脚本不
   assert.deepEqual(leaked, [], `这些不该进包：${JSON.stringify(leaked)}`);
 });
 
-test('打包守卫：lib/ 与 vendor/ 进包（Host 半要能跑）', () => {
+test('打包守卫：lib/ 进包（Host 半要能跑），退役文件不进包', () => {
   const { files } = packed();
   for (const required of [
     'index.js',
     'cordis.patch.yml',
-    'lib/gate.js',
-    'lib/ledger.js',
     'lib/skill-provider.js',
-    'lib/discipline.js',
-    'vendor/config.js',
-    'vendor/schemastery.mjs',
-    'vendor/cosmockit.mjs'.replace('cosmockit', 'cosmokit'),
   ]) {
     assert.ok(files.has(required), `包内缺 ${required}——装完 Host 半跑不起来`);
+  }
+  // 退役实现不许再进包（ADR 0002/0003）
+  for (const banned of ['lib/gate.js', 'lib/ledger.js', 'lib/discipline.js', 'vendor/config.js', 'vendor/schemastery.mjs']) {
+    assert.ok(!files.has(banned), `包里不该有已退役的 ${banned}`);
   }
 
   // LICENSE 与 locale 是发布物的必备项

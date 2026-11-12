@@ -26,20 +26,37 @@ try {
   const pkg = join(work, 'package');
   console.log('  解出: ' + pkg);
 
-  // 3. 判据必须在
+  // 3. 判据必须在（2026-11-13 重定义后的产品本体清单）
   for (const rel of [
     'skills/plugin-kit/SKILL.md',
-    'skills/plugin-kit/references/process.md',
+    'skills/plugin-kit/scripts/preflight.mjs',
+    'skills/plugin-kit/scripts/recheck.mjs',
     'skills/plugin-kit/host-skills/VERSION.json',
     'skills/plugin-kit/host-skills/PATHS-README.md',
-    'skills/plugin-kit/host-skills/cordis-plugin-development/SKILL.md',
-    'skills/plugin-kit/host-skills/cordis-plugin-development/references/practices.md',
-    'skills/plugin-kit/host-skills/cordis-composition-reference/references/packages.md',
-    'lib/gate.js',
-    'vendor/config.js',
+    'skills/plugin-kit/host-skills/dsh-doc/SKILL.md',
+    'skills/plugin-kit/host-skills/dsh-doc/references/practices.md',
+    'skills/plugin-kit/host-skills/dsh-doc/references/packages.md',
+    'lib/skill-provider.js',
     'index.js',
   ]) {
     ok(existsSync(join(pkg, rel)), '解出后有 ' + rel);
+  }
+  // 退役实现不许在包里（ADR 0001-0003）
+  for (const banned of ['lib/gate.js', 'lib/ledger.js', 'lib/discipline.js', 'vendor/config.js']) {
+    ok(!existsSync(join(pkg, banned)), '解出后无退役的 ' + banned);
+  }
+
+  // 3b. preflight 从解出的包里真的能跑（self-test）
+  {
+    const { execFileSync } = await import('node:child_process');
+    let pfOk = false;
+    try {
+      execFileSync(process.execPath, [join(pkg, 'skills/plugin-kit/scripts/preflight.mjs'), '--self-test'], {
+        cwd: work, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 60000,
+      });
+      pfOk = true;
+    } catch { pfOk = false; }
+    ok(pfOk, '解出的 preflight.mjs --self-test 通过');
   }
 
   // 4. VERSION.json 可解析

@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Stage Gate",
-    "description": "A ledger of stage work: which stage produced artifacts, what the gate record says, and who reviewed it in which context. Records by default — it does not block writes. Covers work organized under stages/ only."
+    "title": "Plugin contract & verification",
+    "description": "Contract lookup order and preflight checks for DSH plugin development: three-step host contract lookup, preflight over four failure families, and post-upgrade touchpoint recheck."
   }
 }

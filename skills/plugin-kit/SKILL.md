@@ -1,221 +1,114 @@
 ---
 name: plugin-kit
-description: Use when a DSH plugin needs the full cycle — new plugin, what each stage must produce, an independent reviewer at a stage gate, host touchpoints after a DSH upgrade, or tests that pass while the feature does nothing. Trigger on any DSH plugin, bundle, cordis, install, won't-load, button-does-nothing, or release question. Complements cordis-plugin-development, which says how to build; this says what to produce and who checks it.
+description: Use when developing, installing, or upgrading a DSH plugin — what the host requires, what to verify before claiming done, and how to keep both fresh after a DSH upgrade. Trigger on any DSH plugin, bundle, cordis, install, won't-load, button-does-nothing, or release question. Complements the host's dsh-doc, which holds the mechanisms themselves.
 ---
 
-# DSH 插件开发流程
+# DSH 插件：契约查证与完成验证
 
-> 把"检查"从写的人手里拿走，交给一个不参与写的审查员，能抓住自评永远抓不到的错。
->
-> 代价：判据是事故喂出来的；审查员会误判；中间态留不住。
->
-> **门记录仍要人写**——不是因为它拦你，是因为台账里没有它，事后查不到这一阶段审过没有。
-> 插件形态（`@wufeng0105/dsh-plugin-kit`）**不替你拦人**，它记一本台账：
-> 哪个阶段写过东西、门记录怎么写的、审查是谁在什么上下文里做的。
-> 默认 `observe` 只记账不拦；`mode: enforce` 是显式选择（**未验证**），不是默认。
->
-> 只想要判据、不要插件时，仍可单独复制本目录使用。
+> 你在对着一个黑盒开发：**写之前不知道宿主要什么（契约），写完不知道它认不认（验证）。**
+> 这个 skill 把两面都变成可执行的程序。它不拦你、不替你判断质量——它让你在宣称「完成」之前，每一条都有据可查。
 
 ## 给谁用
 
-**给已经会写 DSH 插件的人。** 这是阶段门与审查清单，不是从零教学。还没装成功过最小插件的话，先去把那件事做完——装不上的时候，下面每一条你都看不懂，因为它们讲的都是"做对了之后怎么防止做歪"。
+**给已经会写 DSH 插件的人。** 还没装成功过一个最小插件的话，先去做那件事——装不上的时候，这里的每一条你都看不懂。
 
-## 它解决什么
+## 一、查契约的三步顺序（痛点：宿主是黑盒）
 
-三轮真实开发里，问题不是「写得不好」，而是**坏在看不见的地方**：
+宿主契约的真实来源只有一个：**正在运行的安装本身**。按成本从低到高三步，前一步答不了才走下一步：
 
-| 失败模式 | 具体形态 | 自评能发现吗 |
+### 第 1 步：`cordis_inspect_query`（权威源， always 先走）
+
+- Service 方法与签名 → host `Service.listService` / `listService({service})`
+- 事件名 / mode / 签名 → host `Event.listEvents` / `listEvents({event})`
+- 插件 Config schema → host `Config.listConfigs`（`name` 过滤，`entry` 取单条）
+- 工具 / Slot / 主题 → 对应 provider
+
+**为什么它是权威源**：事件全集不在任何文档里（实测：rc.2 的 `fs/write-intent` 三个新接缝在 dsh-doc 全文没有逐条清单，只在 inspect 事件目录里）。**查事件签名永远走 inspect。**
+
+### 第 2 步：`dsh-doc` 文档（机制原则与装配形态）
+
+宿主自带的文档 skill（rc.2 起合并了旧的四份）。它讲机制原则：waterfall 纪律、注册的所有权、`ctx.tools.guard` vs `restrict` 的强弱、projection 性能模型。**它不逐条列 API**——那是 inspect 的事。
+
+⚠ 可检索副本在 `host-skills/dsh-doc/`（43 文件，可 grep / glob）。读之前先看 `host-skills/PATHS-README.md`——正文里的相对路径按**副本所在目录**解析，不按宿主报的 base。原文在 208MB 的 app.asar 里，shell 工具打不开。
+
+### 第 3 步：找一个真实运行的同类型插件，读它的源码
+
+**最有效、也最容易被忘的一招。** inspect 给零件，dsh-doc 给原则，但「这些怎么组合起来能用」只在真实插件里。去 `~\.dsh\profiles\<profile>\node_modules\` 找同类插件的 `lib/`。
+
+> 分量：一次真实开发翻遍 catalog 和源码 200 多次没答案，最后是读一个已发布插件的 `lib/routes.js` 才找到接缝。**查得太多本身就是错**——省上下文只有在它没有引起更多搜索、重复读取或错误时才划算。
+
+### 查完必须产出
+
+| 要查的 | 产出（写进你的计划/触点清单） |
+|---|---|
+| 服务方法 | 方法签名 |
+| 事件 | 事件名 + mode（emit/serial/waterfall/parallel）+ 签名 |
+| 插槽 | key + kind + 注册项 + props |
+| Config schema | 字段与类型，用于写 `cordis.patch.yml` |
+
+**每条关于宿主的断言必须带出处**（探测命令+返回，或安装包 `文件:行`）。读源码得出的结论标 L3，不冒充已验证。
+
+## 二、完成验证：preflight（痛点：「完成」没有权威定义）
+
+代码写完、测试全绿 ≠ 装上能用。四类致命失败**全都不在任何一段代码里**，逐段检查看不见：
+
+| 失败家族 | 典型形态 | 在哪暴露 |
 |---|---|---|
-| **没接线** | 模块写了、测试全绿，产品代码没 import 它 | 不能 |
-| **空真** | 「全关时与宿主一致」——当时压根没接线 | 不能 |
-| **假绿** | 负例的观测字段不存在，永远不红 | 不能 |
+| ① 装不上 | 缺 `dsh.bundle.patch`；patch 的 name 与包名不一致；`Config = {}`；inject 猜了不存在的服务 | install 那一刻 |
+| ② 装上了但看不见 | skill 缺 resourceBase（模型不知道文件在哪）；slot 注册塞进 inject 回调 | 用户打开界面那一刻 |
+| ③ 一加载就崩 | client.js 含 ESM export——宿主把所有插件 client.js **拼成一个大脚本**，一个坏插件让整个 web boot 崩 | 重启那一刻 |
+| ④ 环境相关 | 最小 profile 能用、混进完整插件集崩（日志无堆栈） | 换环境那一刻 |
 
-共同点：**它们不在任何一段代码里，而在段与段之间。逐段检查一律看不见。**
+**跑自检**（装之前，每次交付前）：
 
-### 与宿主内置 skill 的分工
+```bash
+node <本skill目录>/scripts/preflight.mjs <你的插件项目根>
+```
 
-宿主自带 4 个 skill，讲**怎么用宿主的 API**。这个 skill 讲**怎么确认自己用对了**。
+逐项输出 ✓ / ✗ / ?，FAIL 附「缺什么、怎么补」。脚本自带 `--self-test`——先证明判定式会红，再用它判你的项目。
 
-判别轴不是「事实 vs 判断」，而是：
+**preflight 覆盖不了的**：家族④ 只能真机验。用**一次性 profile**（建 → 装 → 验 → 拆，复刻目标环境的完整 bundle 组合，不碰日常 profile）。具体命令随宿主版本变，真跑 `dsh --help` / `dsh plugin --help` 现取。三条语义约束：`--from-default-profile` 是替换语义；不能与 shipped 模板同名；必须先建后装。
 
-> **内置给你领域契约知识 + 零散的证据标准；这个 skill 给你一套可执行的裁决程序。**
+## 三、升级保鲜：recheck（痛点二在升级后复发）
 
-**碎片 vs 程序。** 程序需要角色、循环、结论格式——这些塞进知识文档会毁掉知识文档。
+DSH 升级 = 契约与验证清单同时刷新。两个动作：
 
-## 最短路径
+```bash
+# ① 宿主文档副本是否过期（STALE 判定 + 一键重解）
+node <本skill目录>/../host-skills/../../scripts/reextract.mjs --check
+node <本skill目录>/../host-skills/../../scripts/reextract.mjs          # 过期就重解
 
-### 先判断走哪条路
+# ② 你的插件依赖的触点还成立吗
+node <本skill目录>/recheck.mjs --touchpoints touchpoints.json --snapshot host-snapshot.json --strict
+```
 
-- **只是自己用、改一处、当天能验完** → 下面五条就够。
-- **要发布、别人会用、或验收超过三条** → 走完整流程（P0–P5）。
+触点清单写法见 `assets/touchpoints.sample.json`；四态判定（OK / MISSING / CHANGED / UNVERIFIABLE）与 `--self-test` 见脚本头部。**先跑 `--self-test` 证明它会红，再拿它判真实清单。**
 
-拿不准时按完整流程走，但从 P0 开始——P0 只要求一页纸，不浪费多少时间。
-
-### 只做小改动
-
-用下面五条就够。它们覆盖了 23 条铁律里最高频的坑。
+## 四、开发纪律（本仓事故换来的六条，任何插件开发通用）
 
 1. **每条验收必须能判真假**；靠人看的必须给机判替代，否则标「人工判读」。
 2. **每条关于宿主的断言必须带出处**（探测命令+返回，或安装包 `文件:行`）。
-3. **每阶段结束开一个独立审查员**：它不写代码、只读产物、只出三态结论。
-4. **任何检查先证明它会红**，再用它判通过。
-5. **模块存在 ≠ 产品在用**：必须证明它在 import 图里可达。
+3. **任何检查先证明它会红**，再用它判通过——改坏 → 红 → 改回 → 绿。「测试全绿」是一个状态，不是一项证据。
+4. **模块存在 ≠ 产品在用**：必须证明它在 import 图里可达。
+5. **「无法判定」不是「通过」**。探测不到就标 `UNVERIFIABLE`，写明证据等级（L1 运行时 / L2 行为复现 / L3 源码 / L4 自述）。
+6. **交付说明里的命令必须真跑过。**
 
-> 即使只是"先搭个架子"，也先写三行验收标准——否则后面没人能判断"做完没有"。
+> 每条都有对应的事故出处（离线全绿真机崩、假绿机、自评盲区），完整案例在源码仓 `evidence/process-lab-legacy/`。
+> 更重的阶段门流程（独立审查员、九阶段）已从本 skill 退役——对单人开发，上面六条 + preflight 覆盖了最高频的坑；审查员协议仍作为本仓自身的开发纪律保留。
 
-### 完整流程
+## 五、新建一个插件项目
 
-阶段序列：
+**不要从零手写。** 复制骨架：`template/`（4 文件：package.json / cordis.patch.yml / index.js / AGENTS.md）。
 
-```
-P0 需求 → P1 计划 → P1.5 探针门 → P2 执行 → P3 验证 → P3b 修复 → P3.5 运行时验收 → P4 交付 → P5 维护
-                                          ↑ 每道门都可能打回，打回后下游停摆
-```
+1. 整目录复制到项目根
+2. 把占位符 `my-plugin` 全部替换成本项目名（三处同步，改完搜一次 `my-plugin` 必须零残留）
+3. 跑 `preflight.mjs <项目根>` —— 0 FAIL 后再装
+4. 装一次（`install_bundle`，target 传项目绝对路径），读返回的 `application`——**骨架装得上，才算搭好了**
 
-每个阶段的入口、产物、出口判据见 [`references/process.md`](references/process.md)。
-
-### 开审查员
-
-阶段做完，对新开的子代理说：
-
-> 开一个审查员，按 `references/process.md` 的 P\<n\> 出口判据审这一版。
-> 需求在 `<需求文件>`，产物在 `<产物目录>`。只读不写，只出三态结论。
-
-然后把 [`references/reviewer.md`](references/reviewer.md) 的「任务书模板」贴进去。
-
-**必须是新开的。** 同一个会话让它"顺便检查一下"不算——那是自评的加强版，三轮实验里一次真正的 BLOCKER 都没抓到。
-
-### 怎么让它不被忘记
-
-最常见的困扰是"每次都要再强调一遍"。三种**执行方式**：
-
-| 方式 | 机制 | 优点 | 代价 |
-|---|---|---|---|
-| 写进 `AGENTS.md` | 每次运行都注入 | 一定会被看见，零维护 | 太长会被稀释，只能放短规则 |
-| 做成 skill | 按描述匹配自动加载 | 可放长文，按需加载 | 匹配不上就不出现 |
-| **做成插件** | 宿主级接缝 + 台账 | **不会漏记** | 要改目录结构、要放 marker；判据仍靠人定 |
-
-**三者不是新旧两代，是同一套判据的三种执行方式。**
-
-- 短规则 → `AGENTS.md`
-- 长内容 → skill
-- **需要「事后查得到」→ 插件**（它记录，不阻止）
-
-> **为什么插件那一格不再写「强制」**：这个包真的拦过人，764 分钟里拦了 17 次、
-> 0 次针对产品代码，还拦掉了最后一次独立审查派发。拦截层已删。**别把「记了台账」
-> 当成「检查已经发生」**——台账能证明「这件事有记录」，不能证明「这件事被审过」。
-
-## 新建一个插件项目
-
-**不要从零手写。** 有一个现成的骨架，复制过去即可：`template/`
-
-```
-template/
-├── package.json          ← 含 dsh.bundle.patch，宿主才认它是插件
-├── cordis.patch.yml      ← 插入 profile 的那一行
-├── index.js              ← Host 半骨架，inject 为空
-├── AGENTS.md             ← 给下一个 AI 的项目说明
-├── .stage-gate.json      ← 存在即启用阶段门（不想启用就删掉它）
-└── stages/p0/.gitkeep    ← 让空目录能被 git 记住
-```
-
-> **骨架里没有 `.gitignore`。** 不是漏了——在这个目录深度上，npm 打包会排除它，
-> 放一份会让「仓库里的骨架」和「包里的骨架」不一致（2026-11-11 实测踩到）。
-> 需要的项目自己建一份（`AGENTS.md` 的「交付前」写了时机与内容）。
-
-**三步**：
-
-1. **把 `template/` 里的内容（含隐藏文件）复制到项目根目录**
-2. **把占位符 `my-plugin` 全部替换成本项目名**（短横线小写）：
-
-   | 文件 | 改哪 |
-   |---|---|
-   | `package.json` | `name` → `@local/<项目名>` |
-   | `cordis.patch.yml` | `id` 和 `name` |
-   | `index.js` | `name` 常量 + 日志前缀 |
-
-   **改完搜一次 `my-plugin`，必须零残留。** 漏掉 `cordis.patch.yml` 的 `name` 会让那一行指向不存在的包，插件装不上。
-3. **装一次**（`install_bundle`，`target` 传项目绝对路径），读返回的 `application`——**骨架装得上，才算搭好了**。装完它什么都不做是正常的。
-
-**为什么用骨架而不是现写**：历史上最频繁的失败是「文件都建了，装不上」——`package.json` 少个字段、`inject` 写错一个名字，都在装的那一刻才暴露。骨架把这些固化成文件，漏不了。
-
-## 按需读什么
-
-**阅读顺序就是下表顺序。** 每一份只讲一个主题，读完再决定要不要读下一份。
-
-| # | 文件 | 只讲这一件事 | 读完能回答 |
-|---|---|---|---|
-| 1 | [`references/walkthrough.md`](references/walkthrough.md) | **一次真实打回长什么样** | 「打回具体是什么样？」——**先看这个**，比读 23 条铁律有效 |
-| 2 | [`references/process.md`](references/process.md) | **什么算过**：23 条铁律 + 9 张阶段卡 | 「这一阶段算过了吗？」开工前必读，每阶段结束对照 |
-| 3 | [`references/tools.md`](references/tools.md) | **用什么检查**：每阶段的手段与判据 | 「这一步该跑什么？」卡住时读 |
-| 4 | [`references/reviewer.md`](references/reviewer.md) | **谁来判**：审查员的 9 个动作 + 4 级证据等级 + 任务书模板 | 「审查员会怎么打我回？」要开审查员时读 |
-| 5 | [`references/evidence.md`](references/evidence.md) | **凭什么信**：它证明了什么 + 哪些没证明 | 「我该信它到什么程度？」**决定要不要用之前读；两条还没关掉的边界必须读** |
-
-**为什么是这个顺序**：先看打回（知道疼）→ 再看判据（知道标准）→ 再看手段（知道怎么查）→ 再找审查员（知道谁查）→ 最后看它靠不靠谱（知道信多少）。
-
-## 宿主领域知识在哪
-
-**本 skill 只讲「怎么确认自己用对了」。「宿主的 API 怎么用」在别处。**
-
-那 4 份宿主自带的 skill 已解成**普通文件**，在 `host-skills/`：
-
-| 什么时候读 | 读哪份 |
-|---|---|
-| 要写 Host 半 / Client 半、选 slot、写 Config、抄模板 | `host-skills/cordis-plugin-development/` |
-| 要写 bundle patch、改 preset、查有哪些插件包可装 | `host-skills/cordis-composition-reference/` |
-| 要做 agent preset / composition | `host-skills/editing-cordis-compositions/` |
-| 要写模型可见的工具描述、设计加载时机 | `host-skills/agent-experience/` |
-
-> **读之前先看 [`host-skills/PATHS-README.md`](host-skills/PATHS-README.md)。**
-> 那 4 份是宿主原文的逐字节副本，正文里的 `references/xxx`、`templates/xxx` 是**相对它们各自目录**写的，
-> 而宿主把本 skill 的 base directory 报成 `skills/plugin-kit`——照 base 解析会落到 23 处不存在的文件。
-> 那个文件说明了正确基准。**共 23 处，`cordis-plugin-development` 占 22 处。**
-
-**为什么用这份而不是直接查宿主**：原文在 `app.asar` 里，`grep` 和 `glob` **打不开**——只能 `read` 单文件，且必须预先知道路径。这里的副本是普通文件，能整目录 `grep`、能 `glob`、能 diff。
-
-### 查不出答案时的顺序（与宿主原文合并）
-
-宿主 `cordis-plugin-development/SKILL.md` 自带一条查的顺序：**inspect → 读该包自己的 README（经 packageDir）→ 读 lib/types 源码**。它比下面这条多了「读包 README」一着；本项目补两条宿主没写的：
-
-1. **先 `cordis_inspect_query`**（含宿主说的「读 packageDir 的 README」）—— 答「有什么方法 / 什么事件 / 什么 slot」
-2. **catalog 答不了「怎么组合起来能用」→ `grep` 这里的 `host-skills/`** —— 装配图在文档里
-3. **还不够 → 找一个真实运行的同类型插件，读它的源码** —— **最有效、也最容易被忘的一招**
-
-> 第 3 条的分量：一次真实开发翻遍 catalog 和源码 200 多次没答案，最后是读一个已发布设置页插件的 `lib/routes.js` 才找到接缝。另外，`agent-experience` 的话同样适用：**查得太多本身就是错**。
-
-**版本**：`host-skills/VERSION.json` 记了解出时的 DSH 版本。若 `app.asar` 的修改时间比它新，这份副本可能已过期，应重新解一次。
-
-## 可调用的脚本
-
-| 脚本 | 用法 |
-|---|---|
-| [`scripts/recheck.mjs`](scripts/recheck.mjs) | P5 触点复检。先跑 `node scripts/recheck.mjs --self-test` 证明它会红，再拿它判真实清单 |
-
-## 可复制的资产
-
-| 文件 | 用途 |
-|---|---|
-| [`template/`](template/) | **整目录复制到新项目根**——项目骨架，见上文「新建一个插件项目」 |
-| [`template/AGENTS.md`](template/AGENTS.md) | 只想给已有项目加一份项目说明时，单独复制这一个 |
-| [`assets/touchpoints.sample.json`](assets/touchpoints.sample.json) | 触点清单样例，抄结构 |
-| [`assets/host-snapshot.sample.json`](assets/host-snapshot.sample.json) | 宿主探测快照样例，抄结构 |
+> 骨架里没有 `.gitignore`。不是漏了——npm 打包总会排除它，放一份会让仓库与包不一致（2026-11-11 实测）。加第一个依赖时自己建。
 
 ## 关键提醒
 
-- **测试全绿 ≠ 验收通过**。三轮实验里第三轮 111 个测试全绿，仍有 5 项验收无法通过。
-- **"无法判定"不是"通过"**。探测不到就标 `UNVERIFIABLE`，并写明证据等级。
-- **交付说明里的命令必须真跑过**。有一次 `npm test` 写错路径，从来没被跑过。
-- **证据等级 L3 不能冒充 L1/L2**。读源码得出的结论，不能写成"已验证"。
-
-## 这套东西的边界
-
-**它不是万能的。完整边界在 [`references/evidence.md`](references/evidence.md)，这里只点出最要紧的两条。**
-
-**这两条还没关掉，用之前必须知道**：
-
-1. **「换人」从没真的换过**——三轮实验换了上下文，但同一模型、同一作者、同一机器、同一宿主版本。所以验证的是「审查员没参与写」，不是「换个人也一样」。如果换人后打回位置完全不同，这套判据就只是「这个作者踩过的坑清单」，不是结构性的。
-2. **成本只测过一半**——E 阶段实测 204 分钟（事前止损线的 70.8%），这个数支持「流程能抓到真问题」，**不支持「流程划算」**。而且那次实验的第 9–12 起缺陷是**用户发现的，不是审查员**——最后一道防线是人。
-
-另外两条长期边界（不必记，但结论依赖它们时要降级）：中间态不可复跑（证据是报告文字，不是可重放快照）；审查员会误判（它漏过也错过，只是比自评更可靠）。
-
-**想判断「现在该信它到什么程度」，去读 `evidence.md` 前两节。**
+- **测试全绿 ≠ 验收通过**。111 个测试全绿仍有 5 项验收无法通过，是真实发生过的事。
+- **inspect 是权威源**：任何「宿主支持/不支持 X」的断言，先 query 再写。
+- **证据等级不能冒充**：L3（源码核对）不能写成「已验证」。

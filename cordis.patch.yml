@@ -3,18 +3,9 @@
 # 行 id 必须与 index.js 的 `export const name` 一致（都是 `plugin-kit`）。
 # 包名 `@wufeng0105/dsh-plugin-kit` 是另一回事，不需要相等。
 #
-# 装了这行会同时得到三段：
-#   - skill `plugin-kit` 出现在宿主 skill 目录
-#   - systemPrompt 里多一段常驻纪律
-#   - tools/pre-execute 台账（默认 observe：只记账不拦）
-#
-# mode 故意不写（Config 默认 observe，与 2026-11-11 D1 裁定一致）：
-# enforce 是「未验证的实验功能」，必须由用户在自己 profile 的行上显式加
-# `mode: enforce`，不能随包分发时默认带上——那等于替用户选了裁定书明确
-# 警告过的路径。也不写 root（它已不是配置项，恒为 stages）。
+# 装了这行会得到：
+#   - skill `plugin-kit` 出现在宿主 skill 目录（契约查证 + preflight/recheck 判据）
+# 本插件无用户配置（Config 不导出）——不需要任何 config 块。
 - insert:
     - id: plugin-kit
       name: '@wufeng0105/dsh-plugin-kit'
-      config:
-        enabled: true
-        gateFile: GATE.json

@@ -33,8 +33,8 @@ try {
     }
   })(proj, '');
   console.log('  复制出 ' + copied.length + ' 个文件: ' + copied.join(', '));
-  ok(copied.includes('.stage-gate.json'), '隐藏文件 .stage-gate.json 复制到了');
-  ok(copied.includes('stages/p0/.gitkeep'), 'stages/p0/ 结构复制到了');
+  ok(copied.includes('AGENTS.md'), 'AGENTS.md 复制到了');
+  ok(copied.includes('index.js') && copied.includes('package.json') && copied.includes('cordis.patch.yml'), '三处本体文件复制到了');
 
   // 2. 占位符替换
   for (const rel of ['package.json', 'cordis.patch.yml', 'index.js']) {
@@ -82,14 +82,8 @@ try {
   ok(typeof mod.apply === 'function', 'apply 是函数');
   ok(Array.isArray(mod.inject) && mod.inject.length === 0, 'inject 是空数组');
 
-  // 7. marker 可解析
-  const marker = JSON.parse(readFileSync(join(proj, '.stage-gate.json'), 'utf8'));
-  // 2026-11-12 审计改：原先是 `marker.enabled === true && marker.root === 'stages'`。
-  // root 已从配置砍掉（readMarker 不读它），所以断言改成「只有 enabled，不许有 root」。
-  ok(
-    marker.enabled === true && marker.root === undefined,
-    '.stage-gate.json 只有 enabled，没有废弃的 root',
-  );
+  // 7. marker 可解析（已退役——改为核对骨架不再含 marker）
+  ok(!existsSync(join(proj, '.stage-gate.json')), '.stage-gate.json 不在骨架里（marker 已随拦截层退役，ADR 0001）');
 
   // 清理 tgz
   rmSync(tgz, { force: true });
