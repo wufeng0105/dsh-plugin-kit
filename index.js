@@ -228,7 +228,7 @@ export function apply(ctx, config = {}) {
   log('info', `[plugin-kit] 纪律段已挂载 → name=${SECTION_NAME} order=${SECTION_ORDER}`);
 
   if (!cfg.enabled) {
-    log('warn', '[plugin-kit] 拦截已禁用（enabled: false），但 skill 与纪律段仍然生效');
+    log('warn', '[plugin-kit] 台账已禁用（enabled: false），但 skill 与纪律段仍然生效');
     return;
   }
 

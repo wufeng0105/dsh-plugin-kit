@@ -721,7 +721,8 @@ test('A 阶段：enabled=false 时仍打 skill 和纪律两行自检', () => {
   const messages = logger.map((l) => l.message);
   assert.ok(messages.some((m) => m.includes('skill provider 已注册')));
   assert.ok(messages.some((m) => m.includes('纪律段已挂载')));
-  assert.ok(messages.some((m) => m.includes('拦截已禁用')), '应说明拦截被禁用');
+  // 2026-11-12：措辞由「拦截已禁用」改为「台账已禁用」——拦截层已删（D1 裁定）。
+  assert.ok(messages.some((m) => m.includes('台账已禁用')), '应说明台账被禁用');
 });
 
 // ---------------------------------------------------------------- B 阶段：layout 不再是死配置
@@ -776,13 +777,13 @@ test('日志规范：启动四行齐全（含版本号 + cwd）', async () => {
   assert.ok(msgs.some((m) => m.includes('已启用')), '缺启用自检');
 });
 
-test('日志规范：拦截被禁用是 warn 不是 info', async () => {
+test('日志规范：台账被禁用是 warn 不是 info', async () => {
   const ws = makeWorkspace();
   const { ctx, logger } = makeCtx({ workspace: ws });
   apply(ctx, { enabled: false });
-  const disabled = logger.find((l) => l.message.includes('拦截已禁用'));
+  const disabled = logger.find((l) => l.message.includes('台账已禁用'));
   assert.ok(disabled !== undefined, '应有禁用日志');
-  assert.equal(disabled.level, 'warn', '用户主动关掉拦截应该是 warn（显眼）');
+  assert.equal(disabled.level, 'warn', '用户主动关掉台账应该是 warn（显眼）');
 });
 
 test('日志规范：高频项降级为 debug', async () => {
