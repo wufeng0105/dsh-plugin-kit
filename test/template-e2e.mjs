@@ -5,7 +5,9 @@ import { mkdtempSync, rmSync, cpSync, readFileSync, writeFileSync, existsSync, r
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const ROOT = 'C:/Users/Administrator/Documents/ProgramFilesCode/DshBundle/dsh-plugin-kit';
+// 仓库根：按本文件位置解析，不写死绝对路径（2026-11-13 修：仓库搬家后写死路径让本测试 ENOENT）。
+import { fileURLToPath } from 'node:url';
+const ROOT = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
 const TPL = join(ROOT, 'skills/plugin-kit/template');
 const NAME = 'e2e-fresh';
 // 宿主进程的 PATH 里可能没有 npm（宿主用包装脚本）。用绝对路径，Windows 上要 .cmd。

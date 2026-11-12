@@ -2,7 +2,9 @@
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 
-const ROOT = 'C:/Users/Administrator/Documents/ProgramFilesCode/DshBundle/dsh-plugin-kit';
+// 仓库根：按本文件位置解析，不写死绝对路径（2026-11-13 修：仓库搬家后写死路径让本测试 ENOENT）。
+import { fileURLToPath } from 'node:url';
+const ROOT = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
 
 function run(cmd) {
   try {

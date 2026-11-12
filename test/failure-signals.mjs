@@ -1,22 +1,11 @@
 /**
-process.exitCode = failed.length === 0 ? 0 : 1;
-}
-    await checkAsync('C5-b', '定义 provider 与注册名不符 → 宿主会拒（isValidDefinition 复现该规则）', async () => {
-      const dir = mkdtempSync(join(tmpdir(), 'bad-skill-'));
-  WORKSPACES.push(dir);
-      try {
-        mkdirSync(join(dir, 'bad'), { recursive: true });
-        writeFileSync(join(dir, 'bad', 'SKILL.md'), '---\nname: bad\ndescription: d\n---\nbody', 'utf8');
-        // readSkill 用传入的 provider 构造定义，所以它总是自洽的。
-        // 宿主校验的是「候选声称的 provider 是否等于注册名」——那一步在 list() 里由 isValidCandidate 把关。
-        const def = await readSkill({ root: dir, provider: 'p1', locator: { directory: 'bad' } });
-        assert(def !== undefined, 'readSkill 应能读出定义');
-        assert(isValidDefinition(def, 'p1') === true, 'provider 一致时应通过');
-        assert(isValidDefinition(def, 'p2') === false, 'provider 不一致时应被拒——这是宿主 validateDefinition 的规则');
-        return '一致通过 / 不一致拒绝';
-      } finally { rmSync(dir, { recursive: true, force: true }); }
-    });
+ * 失败信号验证 —— C 阶段「每个静默失败都有一个可观测信号」。
+ *
+ * 目的：插件的各种「看起来在工作、实际没在工作」的形态，
+ * 每一种都必须留下用户能看到的信号（日志、warn、决策理由）。
+ *
  * 用法：node test/failure-signals.mjs
+ * 退出码：0 全部成立 / 1 有失败信号缺失
  */
 
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';

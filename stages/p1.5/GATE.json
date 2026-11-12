@@ -1,0 +1,7 @@
+{
+  "stage": "p1.5",
+  "verdict": "pass",
+  "by": "agent",
+  "at": "2026-11-13T03:10:00+08:00",
+  "reason": "三条探针全部关闭：T1 已验（asar 内四份旧 skill 已被宿主合并为 dsh-doc 一份，重解对象变更；自研 asar 解析器解除单文件限制）；T2 已验（注册契约新增 whenToUse/metadata，BUNDLED_SKILL_RANK=600，dsh-doc 已自带注册，SKILL.md 改定位为补充）；T3 已验（client.js ESM 判定式 5 用例红绿正确）。对 P1 计划三处修订已记录。"
+}

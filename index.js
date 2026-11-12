@@ -15,7 +15,7 @@
  *   - 不自动跑审查员
  *   - 不校验 GATE.json 的内容质量
  *
- * @module @wufeng0105/dsh-stage-gate
+ * @module @wufeng0105/dsh-plugin-kit
  */
 
 import { decide, normalizePath, DEFAULT_LAYOUT, DEFAULT_ROOT, extractTarget, locateStage, relativize } from './lib/gate.js';
