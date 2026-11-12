@@ -35,11 +35,11 @@
 (Get-Item "$env:LOCALAPPDATA\Programs\DeepSeek Harness\resources\app.asar").LastWriteTime
 # 比 VERSION.json 的 extractedAt 新 → 过期
 
-# ② 机判（推荐）
+# ② 机判（推荐）——reextract 只在源码仓根有（不随 npm 包分发，它要读本机 asar 并写回仓内副本）
 node scripts/reextract.mjs --check
 ```
 
-**重解**：
+**重解**（同样在源码仓根跑；重解后重装本包，副本才随包更新）：
 
 ```powershell
 node scripts/reextract.mjs

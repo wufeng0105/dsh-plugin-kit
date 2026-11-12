@@ -233,14 +233,12 @@ claim('D:版本号', 'CHANGELOG 声称的版本与实际 package.json 一致', (
 
 claim('D:engines', 'package.json 声明了 dsh 版本范围（>=0.2.2-rc.1）', () => {
   const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
-  assert.ok(pkg.engines?.dsh?.includes('0.2.2-rc.1'), `engines.dsh=${pkg.engines?.dsh}`);
+  assert.ok(/dsh"?\s*:\s*[^]*0\.2\.2-rc\.1/.test(JSON.stringify(pkg.engines)) && pkg.engines?.dsh?.startsWith('>=0.2.2-rc.1'), `engines.dsh=${pkg.engines?.dsh}（下界必须是 >=0.2.2-rc.1，子串误命中 rc.10 也不行）`);
   return pkg.engines.dsh;
 });
 
-claim('D:骨架文件数', 'README/SKILL 说骨架 4 个文件，与 template/ 实际一致', () => {
+claim('D:骨架文件数', 'SKILL.md 宣称的骨架文件数与 template/ 实际一致（宣称值与实测值双向核对）', () => {
   const skill = readFileSync(join(SKILL_DIR, 'SKILL.md'), 'utf8');
-  const m = /骨架[^。\n]*?(\d+)\s*文件|4 文件/.exec(skill);
-  assert.ok(m !== null, 'SKILL.md 找不到骨架文件数');
   const dir = join(SKILL_DIR, 'template');
   let n = 0;
   (function walk(d) {
@@ -249,8 +247,14 @@ claim('D:骨架文件数', 'README/SKILL 说骨架 4 个文件，与 template/ �
       else n += 1;
     }
   })(dir);
-  assert.equal(n, 4, `template/ 实际 ${n} 个文件`);
-  return `${n} 个一致`;
+  // 2026-11-13 终审 F 系空真修复：原断言只查「文档里有数字」和「目录等于 4」两件事，
+  // 两者互不比较——文档改称 7 文件时测试照绿。现在抽取的宣称值必须与实测值相等。
+  const claimed = [...skill.matchAll(/复制骨架[：:]\s*`?template\/`?（(\d+)\s*文件/g)]
+    .map((m) => Number(m[1]));
+  assert.ok(claimed.length > 0, 'SKILL.md 找不到「复制骨架：template/（N 文件）」的宣称——锚点失效');
+  const mismatched = claimed.filter((c) => c !== n);
+  assert.ok(mismatched.length === 0, `SKILL.md 宣称骨架 ${claimed.join('/')} 文件，实际 ${n} 个——文档与实际不一致`);
+  return `宣称 ${claimed.join('/')} = 实际 ${n}`;
 });
 
 claim('D:N4:表格完整性', 'README 每行表格都是合法表格行（防两行并成一行）', () => {

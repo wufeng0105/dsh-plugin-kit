@@ -50,10 +50,13 @@ DSH 升级后两件事：
 
 ```bash
 # ① 宿主文档副本过期判定 + 一键重解（rc.2 实测：四份旧 skill 已被宿主合并为 dsh-doc）
+#    注意：reextract 只在源码仓有（它要读本机 app.asar 并写回仓内副本），不随 npm 包分发——
+#    装包形态下请在源码仓根跑，或见 plugin-kit skill §三的两态说明。
 node scripts/reextract.mjs --check
 node scripts/reextract.mjs
 
-# ② 触点复检（recheck，同上）
+# ② 触点复检（recheck 随包分发，装包形态从 skills/plugin-kit/scripts/ 跑）
+node skills/plugin-kit/scripts/recheck.mjs --touchpoints touchpoints.json --snapshot host-snapshot.json --strict
 ```
 
 ## 安装
@@ -114,7 +117,7 @@ dsh-plugin-kit/
 |---|---|
 | preflight 是静态检查 | 它判不了运行时行为——装完后的实际可见性仍需一次性 profile 真机验证 |
 | 「环境相关」家族 UNVERIFIABLE | 插件间冲突只能真机验（复刻完整 bundle 组合的一次性 profile） |
-| 文档副本会过期 | 宿主升级后跑 `reextract.mjs --check`；不做激活时自动同步（拿稳定性换新鲜度不划算） |
+| 文档副本会过期 | 宿主升级后在**源码仓**跑 `node scripts/reextract.mjs --check`（该脚本不随 npm 包分发，见上「源码布局」）；不做激活时自动同步（拿稳定性换新鲜度不划算） |
 | inspect 不可达时判不了 | 没有宿主运行时，契约只能读到 L3（源码核对），不冒充已验证 |
 
 ## 生命周期
@@ -122,6 +125,7 @@ dsh-plugin-kit/
 - **升级**：`plugin_manager install_bundle target=<新包路径>`，启动日志版本号会变
 - **卸载**：`dsh plugin --profile <profile> remove @wufeng0105/dsh-plugin-kit`——不删你项目的任何文件
 - **从 0.1.x（旧阶段门形态）升级**：直接换包即可；你项目里的 `.stage-gate.json` / `stages/` / `stages/_ledger.jsonl` 不会被删除也不会再被读写——要不要清掉由你决定（它们属于已退役的机制）
+- **从更早的旧包名 `@wufeng0105/dsh-stage-gate` 升级**：必须先卸旧再装新（旧包若仍在 profile 中，两套 bundle 行并存会双重注册）
 
 ## 许可证
 

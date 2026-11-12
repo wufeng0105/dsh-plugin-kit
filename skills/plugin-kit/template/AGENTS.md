@@ -31,7 +31,9 @@
 1. `node <plugin-kit包>/skills/plugin-kit/scripts/preflight.mjs <项目根>` —— 0 FAIL 才算预检过
 2. `npm pack` 后从 tarball 真加载一次
 3. **加第一个依赖时**，顺手建 `.gitignore`：`node_modules/`、`*.tgz`、`*.log`。（骨架没有依赖，所以还没建。骨架里不能预放 `.gitignore`：npm 打包会排除它，仓库与包就对不上了。）
-4. 升级 DSH 后：跑 `recheck.mjs`（触点复检）+ `reextract.mjs --check`（文档副本过期判定）
+4. 升级 DSH 后：跑 `recheck.mjs`（触点复检，`<plugin-kit包>/skills/plugin-kit/scripts/`）；
+   文档副本过期判定用 `reextract.mjs --check`——**该脚本只在 plugin-kit 源码仓有**（不随包分发），
+   用法见 `plugin-kit` skill §三的两态说明
 
 ## 不要做
 
