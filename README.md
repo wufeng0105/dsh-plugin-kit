@@ -15,11 +15,21 @@
 
 合并后装一个包全都有，版本天然同步，卸载一键干净。
 
-## 三种执行方式
+## 三种形态
 
-同一套判据有三种执行方式：写进 `AGENTS.md`（短规则、每次注入）、做成 skill（长文按需加载）、**做成插件**（本包，宿主级**台账**）。
+同一套判据可以只用一部分，取决于你装多少。
 
-本包是第三种，并把前两种的载体一起给了：[`skills/plugin-kit/template/`](skills/plugin-kit/template/) 是新项目骨架（6 个文件，整目录复制即可）。其中的 `AGENTS.md` 是**给下一个 AI 的项目说明**（它每次运行都会被注入），不是写给当前这个人的。
+| 形态 | 装什么 | 得到什么 |
+|---|---|---|
+| **纯判据** | 复制 `skills/plugin-kit/` 到项目的 `.dsh/skills/` 或 `~/.dsh/skills/` | 只有 skill，无插件、无台账 |
+| **完整**（推荐） | 装本包 | 判据 + 纪律 + 台账（默认不拦） |
+| **显式拦截** | 装本包 + `mode: enforce` | 再加真拦（**未验证**，见「三级采用」） |
+
+三种载体各管一段：写进 `AGENTS.md`（短规则、每次注入）、做成 skill（长文按需加载）、做成插件（本包，宿主级**台账**）。
+
+本包是第三种，并把前两种的载体一起给了：[`skills/plugin-kit/template/`](skills/plugin-kit/template/) 是新项目骨架（6 个文件，整目录复制即可）。其中的 `AGENTS.md` 是**给下一个 AI 的项目说明**（每次运行都会被注入），不是写给当前这个人的。
+
+**注意**：装了包就**必然带 `tools/pre-execute` 接缝**（没有设置页可以只开一部分）。想要纯判据，用第一种形态。
 
 ## 三样东西分别是什么
 
@@ -138,16 +148,6 @@ skill 目录里出现 plugin-kit
 >
 > 注意它现在也会拦 `skip`：写 `{"verdict":"skip"}` 不再等于放行。
 
-## 三种交付形态
-
-| 形态 | 装什么 | 得到什么 |
-|---|---|---|
-| **纯判据** | 复制 `skills/plugin-kit/` 到项目的 `.dsh/skills/` 或 `~/.dsh/skills/` | 只有 skill，无插件、无台账 |
-| **完整** | 装本包 | 判据 + 纪律 + 台账（默认不拦） |
-| **显式拦截** | 装本包 + `mode: enforce` | 判据 + 纪律 + 台账 + 真拦 |
-
-**注意**：装了包就**必然带 `tools/pre-execute` 接缝**（没有设置页可以只开一部分）。想要纯判据，用第一种形态。
-
 ## 源码布局
 
 ```
@@ -175,27 +175,31 @@ dsh-plugin-kit/
 
 > 2026-11-10 之前这里还有一棵 `.dsh/skills/plugin-kit/`（本地开发现场），靠「双树一致性」测试守着。**那棵树已删除**——它让发布物隐含依赖一个别人不会创建的目录。那条测试改写成更有意义的问法：**「SKILL.md 里提到的每个文件都必须真的在包里」**。
 
-### `skills/plugin-kit/host-skills/`：为什么宿主文档要在这里存一份
+### `skills/plugin-kit/host-skills/`
 
-宿主自带 4 个 skill（`cordis-plugin-development`、`cordis-composition-reference`、`editing-cordis-compositions`、`agent-experience`），讲的是**「宿主的 API 怎么用」**——和本包的**判据**互补。
+宿主自带 4 个 skill 的**逐字节副本**。原文在 203MB 的 `app.asar` 里，`grep` / `glob` 打不开，
+只有 `read` 单文件能进且要预先知道路径。解成普通文件后能整目录扫。
 
-**但它们的原文在 203MB 的 `app.asar` 里**：`ls` / `cat` / `grep` / `glob` 全都打不开，只有 `read` 单文件能进，且必须**预先知道路径**。
+`host-skills/VERSION.json` 记了来源版本；`app.asar` 比它新就说明副本可能过期。
+**什么时候读哪份、为什么会有这份副本** → 见 `skills/plugin-kit/SKILL.md`「宿主领域知识在哪」。
 
-实测代价：一次真实插件开发里，为回答「宿主有没有删除会话的 API」「Client 怎么让 Host 执行操作」，花了 22 次 `cordis_inspect_query`（同一份 catalog 查了 14 次）、55 次 `grep`、71 次 `read`——**大部分时间在跟「东西打不开」搏斗**。
+## 文档地图
 
-解成普通文件后：
+**每份只讲一件事。** 阅读顺序即下表顺序。
 
+| 文件 | 只讲这一件事 |
+|---|---|
+| `README.md`（本文件） | 这个包是什么、怎么装、怎么配 |
+| [`skills/plugin-kit/SKILL.md`](skills/plugin-kit/SKILL.md) | **导航**：现在该读哪份判据 |
+| [`references/walkthrough.md`](skills/plugin-kit/references/walkthrough.md) | **示例**：一次真实打回长什么样 |
+| [`references/process.md`](skills/plugin-kit/references/process.md) | **判断标准**：什么算过（23 条铁律 + 9 张阶段卡） |
+| [`references/tools.md`](skills/plugin-kit/references/tools.md) | **手段**：用什么检查 |
+| [`references/reviewer.md`](skills/plugin-kit/references/reviewer.md) | **审查员**：它怎么判 |
+| [`references/evidence.md`](skills/plugin-kit/references/evidence.md) | **凭什么信**：证明了什么、哪些没证明 |
+| [`LOGGING.md`](LOGGING.md) | 日志规范 |
+| [`CHANGELOG.md`](CHANGELOG.md) | 版本历史 |
 
-| | `app.asar` 里 | `host-skills/` |
-|---|---|---|
-| `grep` | ❌ 打不开 | ✅ |
-| `glob` | ❌ | ✅ |
-| 要不要先知道路径 | **要** | 不要 |
-| 一次能扫多少 | 一个文件 | 整目录 |
-
-**版本**：`host-skills/VERSION.json` 记了来源版本。`app.asar` 的修改时间比它新，就说明副本可能过期了，重新解一次即可——不做自动检测，因为读旧文档不是坏东西。
-
-**这 4 份不会被注册成插件 skill**：`skill-provider` 只扫 `skills/` 的直接子目录，`vendor/` 不在范围。它们只是普通文档。
+**跨文档引用按名不按号**（「铁律 12」除外——铁律编号被外部引用依赖，不加不减）。
 
 ## 日志
 
