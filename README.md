@@ -68,7 +68,7 @@ plugin_manager install_bundle target=<本目录绝对路径>
 
 ```
 dsh-plugin-kit/
-├── index.js                 Host 半：只做 skill provider 注册（约 70 行）
+├── index.js                 Host 半：只做 skill provider 注册（86 行）
 ├── lib/skill-provider.js    skill 扫描与定义校验
 ├── skills/plugin-kit/       产品本体
 │   ├── SKILL.md             判据正文：查契约三步 + 失败家族 + 开发纪律

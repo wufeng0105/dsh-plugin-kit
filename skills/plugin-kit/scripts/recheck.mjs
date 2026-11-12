@@ -3,8 +3,8 @@
  * recheck.mjs — 「DSH 升级后，我依赖的触点还成立吗？」
  *
  * 这是一个**模板**，来自三轮实验里实际用过的复检脚本。用之前：
- *   1. 把 `touchpoints.json` 换成你项目的触点清单（结构见 templates/touchpoints.sample.json）
- *   2. 用 cordis_inspect_query 导出宿主快照（结构见 templates/host-snapshot.sample.json）
+ *   1. 把 `touchpoints.json` 换成你项目的触点清单（结构见 ../assets/touchpoints.sample.json）
+ *   2. 用 cordis_inspect_query 导出宿主快照（结构见 ../assets/host-snapshot.sample.json）
  *   3. 用 `--scan-dir` 指向你的源码目录，开启漂移扫描
  *
  * 四种结论：

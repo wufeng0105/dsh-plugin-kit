@@ -7,7 +7,7 @@
  * 历史形态（拦截 / 台账 / 纪律段）已退役：
  *   - 拦截层废弃：docs/adr/0002-拦截层废弃.md
  *   - 作证台账搁置：docs/adr/0003-作证台账搁置.md
- *   - 旧实现完整代码在 git（61f5fa2 之前），工作树不再保留。
+ *   - 旧实现完整代码在 git（a3f686d 的父提交及之前，即 61f5fa2 / c98c543），工作树不再保留。
  *
  * 用到的接缝（rc.2 inspect 实测）：
  *   ctx.skills.registerProvider  —— 把 skills/ 注册进宿主 skill 目录

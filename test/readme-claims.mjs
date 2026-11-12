@@ -142,6 +142,25 @@ claim('判据:M9', 'SKILL.md 引用的每个相对路径都必须真实存在', 
   return `${all.length} 个引用全部存在`;
 });
 
+claim('保鲜:命令占位符逐条解析（D1 回归守卫）', 'SKILL.md 命令块里 `<本skill目录>/...` 指向的脚本在包里真实存在', () => {
+  const skill = readFileSync(join(SKILL_DIR, 'SKILL.md'), 'utf8');
+  // 抓命令块里的占位符路径：<本skill目录>/xxx/yyy.mjs
+  const cmds = [...skill.matchAll(/<本skill目录>\/([a-zA-Z0-9_\-./]+\.(?:mjs|md|json))/g)].map((m) => m[1]);
+  assert.ok(cmds.length > 0, 'SKILL.md 命令块里没有 <本skill目录> 占位符——锚点失效');
+  const missing = cmds.filter((rel) => !existsSync(join(SKILL_DIR, rel)));
+  assert.ok(missing.length === 0, '占位符命令指向不存在的文件（安装形态下必然 No such file）：' + JSON.stringify(missing));
+  // 反向：占位符不得试图跳出 skill 目录（../ 开头的形态 2026-11-13 审查抓到过）
+  const escapees = cmds.filter((rel) => rel.startsWith('..'));
+  assert.ok(escapees.length === 0, '占位符命令试图跳出 skill 目录（../）：' + JSON.stringify(escapees));
+  return `${cmds.length} 条占位符命令全部可解析`;
+});
+
+claim('保鲜:重解脚本归属声明', 'SKILL.md 必须写明重解脚本在源码仓、不随包分发', () => {
+  const skill = readFileSync(join(SKILL_DIR, 'SKILL.md'), 'utf8');
+  assert.ok(/只在\*\*源码仓\*\*有|不随 npm 包分发|源码仓根跑/.test(skill), 'SKILL.md 没写清 reextract 的归属——用户会照包内路径跑然后 No such file');
+  return '归属声明在位';
+});
+
 // ---- 失败家族
 claim('家族:preflight 自证', 'preflight --self-test 全过（判定式会红）', () => {
   const out = execFileSync(process.execPath, [join(SKILL_DIR, 'scripts', 'preflight.mjs'), '--self-test'], {

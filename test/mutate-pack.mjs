@@ -81,6 +81,29 @@ const results = [];
   });
 }
 
+// ---- 变异 3b（2026-11-13 审查 D1 回归守卫）：保鲜命令占位符路径改坏 → readme-claims 必须红
+{
+  // D1：SKILL.md 的 `<本skill目录>/...` 占位符命令曾指向不存在的文件，
+  // 三个引用检查器的正则都抓不到这种形态。readme-claims 的「保鲜:命令占位符逐条解析」
+  // 是补上的守卫——本变异证明它确实会红。
+  const f = `${ROOT}/skills/plugin-kit/SKILL.md`;
+  const orig = readFileSync(f, 'utf8');
+  const patched = orig.replace(
+    'node <本skill目录>/scripts/recheck.mjs --touchpoints',
+    'node <本skill目录>/../elsewhere/recheck.mjs --touchpoints',
+  );
+  const changed = patched !== orig;
+  writeFileSync(f, patched, 'utf8');
+  const r = run('node --test test/readme-claims.mjs');
+  writeFileSync(f, orig, 'utf8');
+  results.push({
+    name: '保鲜命令占位符指坏路径',
+    injected: changed,
+    red: !r.ok,
+    detail: changed ? (r.ok ? '仍绿 ← 空真' : '变红 ✓') : '注入失败',
+  });
+}
+
 // ---- 变异 4：骨架里改名一处、忘另一处 → template.mjs 必须红
 {
   // 这是骨架最可能的坏法：有人改 package.json 的 name，忘了 cordis.patch.yml。

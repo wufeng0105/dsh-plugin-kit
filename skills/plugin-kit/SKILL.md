@@ -71,18 +71,28 @@ node <本skill目录>/scripts/preflight.mjs <你的插件项目根>
 
 ## 三、升级保鲜：recheck（痛点二在升级后复发）
 
-DSH 升级 = 契约与验证清单同时刷新。两个动作：
+DSH 升级 = 契约与验证清单同时刷新。两个动作。**脚本位置分两种安装形态**（路径不一样，照错形态跑必然 No such file）：
+
+**包内脚本**（`skills/plugin-kit/scripts/`，随包分发，两态都有）：
 
 ```bash
-# ① 宿主文档副本是否过期（STALE 判定 + 一键重解）
-node <本skill目录>/../host-skills/../../scripts/reextract.mjs --check
-node <本skill目录>/../host-skills/../../scripts/reextract.mjs          # 过期就重解
-
-# ② 你的插件依赖的触点还成立吗
-node <本skill目录>/recheck.mjs --touchpoints touchpoints.json --snapshot host-snapshot.json --strict
+# ② 你的插件依赖的触点还成立吗（先 --self-test 证明它会红）
+node <本skill目录>/scripts/recheck.mjs --self-test
+node <本skill目录>/scripts/recheck.mjs --touchpoints touchpoints.json --snapshot host-snapshot.json --strict
 ```
 
-触点清单写法见 `assets/touchpoints.sample.json`；四态判定（OK / MISSING / CHANGED / UNVERIFIABLE）与 `--self-test` 见脚本头部。**先跑 `--self-test` 证明它会红，再拿它判真实清单。**
+**重解脚本**（`<包根>/scripts/reextract.mjs`——只在**源码仓**有，不随 npm 包分发，因为它要读本机 app.asar 的绝对路径）：
+
+```bash
+# ① 宿主文档副本是否过期（STALE 判定 + 一键重解）——在源码仓根跑：
+#    git clone https://github.com/wufeng0105/dsh-plugin-kit 后：
+node scripts/reextract.mjs --check
+node scripts/reextract.mjs          # 过期就重解（写回源码仓的 host-skills/，再重装包生效）
+```
+
+> **为什么重解脚本不进包**：它写的目标是本机 `app.asar` 相关路径与源码仓的 `host-skills/`，装进宿主 profile 的包没有这些上下文。装包形态下副本过期时，回源码仓重解 + 重装一次即可。
+
+触点清单写法见 `assets/touchpoints.sample.json`；四态判定（OK / MISSING / CHANGED / UNVERIFIABLE）见脚本头部。**先跑 `--self-test` 证明它会红，再拿它判真实清单。**
 
 ## 四、开发纪律（本仓事故换来的六条，任何插件开发通用）
 
