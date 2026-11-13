@@ -62,10 +62,33 @@ node skills/plugin-kit/scripts/recheck.mjs --touchpoints touchpoints.json --snap
 ## 安装
 
 ```powershell
+# 从 npm（推荐）
+plugin_manager install_bundle target=@wufeng0105/dsh-plugin-kit
+
+# 或从源码仓路径
 plugin_manager install_bundle target=<本目录绝对路径>
 ```
 
+包已发布到 npm：[`@wufeng0105/dsh-plugin-kit`](https://www.npmjs.com/package/@wufeng0105/dsh-plugin-kit)。
+
 装完验证：skill 目录里出现 `plugin-kit`；让模型复述「四大失败家族」→ 能。
+
+## 发布与版本管理
+
+**版本号只有一个来源**：`package.json` 的 `version`。git tag 名与 npm 版本都从它派生。
+
+```bash
+node scripts/release.mjs --check          # 只核对现状（七项），不改任何东西
+node scripts/release.mjs patch|minor|major # 升版 + 提交 + 打 tag（跑全量验证门后才动）
+git push origin main --follow-tags
+npm run publish:npm                        # 内部先跑 check + pack 干跑，再发
+```
+
+`release.mjs` 的七项核对：版本是纯 `x.y.z`、CHANGELOG 有对应节、tag 不存在、工作树干净、分支是 main 且已同步、npm 上该版本不存在、`repository` 指回本仓。任何一项不过就拒绝继续。
+
+**脚本不代做 push 与 publish**——两个不可撤销的外部动作，执行权留给人。发布后核对：`npm view @wufeng0105/dsh-plugin-kit version --registry=https://registry.npmjs.org/`。
+
+> 首次发布时 packument（包根索引）会比版本端点晚几分钟生效，期间 `npm install` 报 404 而 tarball 直链已可下载——这是 CDN 传播，不是发布失败。
 
 ## 源码布局
 
