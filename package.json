@@ -44,7 +44,10 @@
     "selfcontained": "node test/selfcontained.mjs",
     "claims": "node test/readme-claims.mjs",
     "mutate": "node test/mutate-pack.mjs && node test/mutate-template.mjs && node test/mutate-preflight.mjs",
-    "check": "node --check index.js && node --check lib/skill-provider.js && node --check skills/plugin-kit/scripts/preflight.mjs && node --check skills/plugin-kit/scripts/recheck.mjs && node --check scripts/reextract.mjs && npm test && npm run packed && npm run template && npm run template-e2e && npm run selfcontained && npm run claims && npm run mutate"
+    "check": "node --check index.js && node --check lib/skill-provider.js && node --check skills/plugin-kit/scripts/preflight.mjs && node --check skills/plugin-kit/scripts/recheck.mjs && node --check scripts/reextract.mjs && npm test && npm run packed && npm run template && npm run template-e2e && npm run selfcontained && npm run claims && npm run mutate",
+    "publish:check": "npm run check && npm pack --dry-run",
+    "publish:npm": "npm run publish:check && npm publish --registry=https://registry.npmjs.org/ --access public",
+    "release": "node scripts/release.mjs"
   },
   "dsh": {
     "bundle": {
