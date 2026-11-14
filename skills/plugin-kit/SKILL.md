@@ -31,6 +31,8 @@ description: Use when developing, installing, or upgrading a DSH plugin — what
 
 ⚠ 可检索副本在 `host-skills/dsh-doc/`（43 文件，可 grep / glob）。读之前先看 `host-skills/PATHS-README.md`——正文里的相对路径按**副本所在目录**解析，不按宿主报的 base。原文在 208MB 的 app.asar 里，shell 工具打不开。
 
+若任务涉及界面、设置页或 Slot：顺着副本的 `dsh-doc/SKILL.md` 「Read next」表往下读 `references/ui-plugin.md` 与 `templates/decoration/`（模板含 `./client` 导出与 `window.__ModuleLoader__.load` 起步形态）；验证页面用 `references/verification.md`。这些文件都在包里，不必从零手写界面。
+
 ### 第 3 步：找一个真实运行的同类型插件，读它的源码
 
 **最有效、也最容易被忘的一招。** inspect 给零件，dsh-doc 给原则，但「这些怎么组合起来能用」只在真实插件里。去 `~\.dsh\profiles\<profile>\node_modules\` 找同类插件的 `lib/`。

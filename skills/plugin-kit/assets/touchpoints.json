@@ -1,0 +1,159 @@
+{
+  "_comment": "本仓的触点清单：plugin-kit 自身依赖的宿主面。升级后用 recheck.mjs --strict 复检。",
+  "host": "0.2.2-rc.3",
+  "touchpoints": [
+    {
+      "id": "svc.skills.registerProvider",
+      "surface": "service",
+      "ref": "ctx.skills.registerProvider()",
+      "code": "index.js:51",
+      "why": "plugin-kit 的唯一宿主接缝：把 skills/ 注册进宿主 skill 目录",
+      "probe": {
+        "kind": "service",
+        "service": "skills",
+        "method": "registerProvider",
+        "signatureIncludes": [
+          "registerProvider",
+          "SkillProvider"
+        ]
+      },
+      "status": "verified",
+      "fallback": "skill 不再出现在宿主 skill 目录，插件只剩日志"
+    },
+    {
+      "id": "svc.skills.list",
+      "surface": "service",
+      "ref": "skills.list()",
+      "code": "lib/skill-provider.js",
+      "why": "宿主用它汇总 provider 的候选；list 返回形状变化会影响索引",
+      "probe": {
+        "kind": "service",
+        "service": "skills",
+        "method": "list",
+        "signatureIncludes": [
+          "Promise<SkillSummary[]>"
+        ]
+      },
+      "status": "verified",
+      "fallback": "skill 列表为空或字段缺失"
+    },
+    {
+      "id": "type.SkillResourceBase",
+      "surface": "type",
+      "ref": "SkillResourceBase",
+      "code": "lib/skill-provider.js",
+      "why": "readSkill 必须报 resourceBase，否则模型不知道文件在哪（家族②）",
+      "probe": {
+        "kind": "type",
+        "type": "SkillResourceBase",
+        "via": {
+          "service": "skills"
+        },
+        "contains": [
+          "kind: 'directory'",
+          "path: string"
+        ]
+      },
+      "status": "verified",
+      "fallback": "模型不知道 skill 文件在哪，读到的是空内容"
+    },
+    {
+      "id": "svc.tools.register",
+      "surface": "service",
+      "ref": "ctx.tools.register()",
+      "code": "外部插件（dsh-tool-keeper）",
+      "why": "内置工具与 MCP 工具的共同注册入口——改写工具说明的唯一时机",
+      "probe": {
+        "kind": "service",
+        "service": "tools",
+        "method": "register",
+        "signatureIncludes": [
+          "ToolDefinition"
+        ]
+      },
+      "status": "verified",
+      "fallback": "无法在注册期改写工具定义"
+    },
+    {
+      "id": "svc.tools.restrict",
+      "surface": "service",
+      "ref": "ctx.tools.restrict()",
+      "code": "外部插件（tool-mask / tool-keeper）",
+      "why": "把工具从模型可见工具表摘掉（省 token 的正解）",
+      "probe": {
+        "kind": "service",
+        "service": "tools",
+        "method": "restrict",
+        "signatureIncludes": [
+          "ToolRestriction"
+        ]
+      },
+      "status": "verified",
+      "fallback": "工具无法隐藏，只能靠 guard 拒绝调用（schema 仍占上下文）"
+    },
+    {
+      "id": "svc.tools.guard",
+      "surface": "service",
+      "ref": "ctx.tools.guard()",
+      "code": "外部插件",
+      "why": "同步硬否决工具调用；deny 必须在同步阶段决定",
+      "probe": {
+        "kind": "service",
+        "service": "tools",
+        "method": "guard",
+        "signatureIncludes": [
+          "ToolGuard"
+        ]
+      },
+      "status": "verified",
+      "fallback": "不注册守卫，工具调用不再被拦"
+    },
+    {
+      "id": "evt.agent-created",
+      "surface": "event",
+      "ref": "agent/created",
+      "code": "外部插件（按 agent 挂载 scoped 子插件）",
+      "why": "每个 agent 创建时注入 per-agent 行为",
+      "probe": {
+        "kind": "event",
+        "event": "agent/created",
+        "mode": "serial",
+        "signatureIncludes": [
+          "'agent/created'"
+        ]
+      },
+      "status": "verified",
+      "fallback": "只能对已存在的 agent 生效，新建的不受影响"
+    },
+    {
+      "id": "svc.webServer.register",
+      "surface": "service",
+      "ref": "ctx.inject(['webServer'], cb) → webServer.register()",
+      "code": "外部插件（dsh-tool-keeper api.js）",
+      "why": "设置页的数据通道；不能写进 inject（headless 无此服务会 pending）",
+      "probe": {
+        "kind": "service",
+        "service": "webServer",
+        "method": "register",
+        "signatureIncludes": [
+          "WebRoute"
+        ]
+      },
+      "status": "verified",
+      "fallback": "设置页拿不到数据"
+    },
+    {
+      "id": "slot.settings-section",
+      "surface": "slot",
+      "ref": "settings.section",
+      "code": "外部插件 ui/client.js",
+      "why": "设置页入口 Slot",
+      "probe": {
+        "kind": "none",
+        "manual": "客户端探测常超时；需页面在线时用 Slots.listSubTree 核对"
+      },
+      "status": "unverified",
+      "fallback": "设置页不出现"
+    }
+  ]
+}

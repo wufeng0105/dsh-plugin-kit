@@ -54,9 +54,14 @@ DSH 升级后两件事：
 #    装包形态下请在源码仓根跑，或见 plugin-kit skill §三的两态说明。
 node scripts/reextract.mjs --check
 node scripts/reextract.mjs
+#    自动同步 VERSION.json 的 dsh 版本号（从 asar 的 dsh/package.json 读，不靠人填）
 
 # ② 触点复检（recheck 随包分发，装包形态从 skills/plugin-kit/scripts/ 跑）
-node skills/plugin-kit/scripts/recheck.mjs --touchpoints touchpoints.json --snapshot host-snapshot.json --strict
+#    先跑 gen-host-snapshot.mjs 生成当前宿主的快照与触点清单（仓库内，不联网）：
+node scripts/gen-host-snapshot.mjs
+node skills/plugin-kit/scripts/recheck.mjs \
+  --touchpoints skills/plugin-kit/assets/touchpoints.json \
+  --snapshot  skills/plugin-kit/assets/host-snapshot.json --strict
 ```
 
 ## 安装

@@ -6,6 +6,7 @@
 //   装不上③  Config 改普通对象
 //   一加载就崩  client.js 加 export
 //   看不见    skill 缺 resourceBase（frontmatter 空 description）
+//   一加载就崩（子包形态）  ui/package.json 声明 ./client，client.js 带 export
 // 「环境相关」家族 UNVERIFIABLE 留痕（good 项目输出里必含该字样）。
 import { readFileSync, writeFileSync, mkdtempSync, rmSync, mkdirSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -89,6 +90,16 @@ try {
   r = run();
   ok(r.code === 1 && statusOf(r.out, 'visible.skill-resourceBase') === 'FAIL', '注入⑤ skill 空 description → visible.skill-resourceBase FAIL');
 
+  // 注入 6：浏览器半放在子包 ui/（根 manifest 不声明 ./client），且 client.js 带 export。
+  // 判定式必须仍能找到它并判红，不能因「根 client.js 不存在」静默 PASS。
+  build({
+    'package.json': GOOD_PKG,
+    'ui/package.json': JSON.stringify({ name: '@local/proj-ui', type: 'module', exports: { '.': './index.js', './client': './client.js' } }),
+    'ui/client.js': `export const x = 1;\nwindow.__ModuleLoader__.load({ id: 'proj', factory: () => ({}) });\n`,
+  });
+  r = run();
+  ok(r.code === 1 && statusOf(r.out, 'crash.client-esm') === 'FAIL', '注入⑥ 子包 ui/client.js ESM → crash.client-esm FAIL');
+
   // 复原：全绿
   build();
   r = run();
@@ -100,5 +111,5 @@ try {
   rmSync(work, { recursive: true, force: true });
 }
 
-console.log(failed === 0 ? '\nA5 变红证明：5 注入点全部逐项红 + 复原绿 + UNVERIFIABLE 留痕。' : `\n${failed} 项失败。`);
+console.log(failed === 0 ? '\nA5 变红证明：6 注入点全部逐项红 + 复原绿 + UNVERIFIABLE 留痕。' : `\n${failed} 项失败。`);
 process.exit(failed === 0 ? 0 : 1);

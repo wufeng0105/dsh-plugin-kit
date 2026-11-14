@@ -164,9 +164,17 @@ const CHECKS = [
       if (!ctx.indexText) return { status: 'PASS' };
       const hasSlots = /slots\.|clientModules|registerSlot/.test(ctx.indexText) || ctx.clientText !== null && /slots\./.test(ctx.clientText);
       if (!hasSlots) return { status: 'PASS', note: '本项目不用 slot，跳过' };
-      // 反模式：slots.register 出现在 slots.inject 的回调内部（缩进层深且同一行域）
+      // slots.register 出现在 slots.inject 回调里，曾导致 2026-11-10「设置页看不到」。
+      // 但官方 templates/decoration/client.js:16 与真实项目都用
+      //   slots.inject(key, () => slots.register({...}, Component))
+      // 这一形态且工作正常。本机没有那次事故的代码，无法区分合法与事故形态，
+      // 故不判 FAIL（会误伤官方形态），也不判 PASS（会放过事故）：标 UNVERIFIABLE。
       if (/slots\.inject\([\s\S]{0,400}?slots\.register/.test(ctx.indexText + (ctx.clientText ?? ''))) {
-        return { status: 'FAIL', why: 'slots.register 出现在 slots.inject 回调内部——inject 是门控不是注册入口，这样注册的槽可能永不出现', fix: '把 register 提为直接调用，inject 只做门控' };
+        return {
+          status: 'UNVERIFIABLE',
+          why: 'slots.inject 回调内出现 slots.register：官方 decoration 模板也用此形态且可正常工作，但 2026-11-10 有「设置页看不到」的事故是同类写法。本机无法区分两者',
+          fix: '人工打开设置页确认该 Slot 是否可见；可见则记「合法形态」，不可见再按事故处理（把 register 提为直接调用，inject 只做门控）',
+        };
       }
       return { status: 'PASS' };
     },
@@ -179,7 +187,13 @@ const CHECKS = [
     name: 'client.js 无 ESM 语法（export / import）',
     basis: '宿主把所有插件的 client.js 拼成一个大脚本加载：一个 export 让整个 web boot 崩（2026-11-10 真机崩溃，21 条离线测试全绿没抓住）',
     check(ctx) {
-      if (ctx.clientText === null) return { status: 'PASS', note: '本项目无 client.js（Host 半插件），跳过' };
+      if (ctx.clientText === null) {
+        const declared = typeof ctx.pkg?.exports?.['./client'] !== 'undefined' || ctx.pkg?.dsh?.client !== undefined || ctx.clientDeclared === true;
+        if (declared) {
+          return { status: 'FAIL', why: 'package.json 声明了浏览器半，但按 exports["./client"] 找不到文件', fix: '补齐 client 文件，或修正 exports["./client"] 的路径' };
+        }
+        return { status: 'PASS', note: '本项目无 client.js（Host 半插件），跳过' };
+      }
       // 模拟宿主拼接 parse（T3 探针验证过的判定式）
       try {
         new Function(ctx.clientText);
@@ -235,8 +249,38 @@ function collect(root) {
     const err = syntaxCheck(indexPath);
     if (err !== null) ctx.syntaxError = err;
   }
-  const clientPath = join(root, 'client.js');
-  ctx.clientText = existsSync(clientPath) ? readFileSync(clientPath, 'utf8') : null;
+  // 浏览器半可能放在包根（client.js），也可能在子包里由 package.json 的
+  // exports["./client"] 指向（实测：dsh-toolwarden 放在 ui/client.js）。
+  // 只查包根会让家族③ 静默 PASS——把这个文件当「Host 半插件，跳过」。
+  const clientRel = (() => {
+    const exp = ctx.pkg?.exports?.['./client'];
+    if (typeof exp === 'string' && !exp.includes('*')) return exp;
+    if (exp && typeof exp === 'object') {
+      for (const v of Object.values(exp)) if (typeof v === 'string' && !v.includes('*')) return v;
+    }
+    return 'client.js';
+  })();
+  const rootClient = join(root, clientRel);
+  let resolved = existsSync(rootClient) ? rootClient : null;
+  // 浏览器半也可能在子包里（如 ui/package.json 声明 ./client，根 package.json 不声明）。
+  // 扫一层子目录，按「相对该子包」解析 exports["./client"]。
+  if (resolved === null && clientRel === 'client.js') {
+    for (const ent of readdirSync(root, { withFileTypes: true })) {
+      if (!ent.isDirectory() || ent.name === 'node_modules' || ent.name.startsWith('.')) continue;
+      const sub = join(root, ent.name, 'package.json');
+      if (!existsSync(sub)) continue;
+      let subPkg;
+      try { subPkg = JSON.parse(readFileSync(sub, 'utf8')); } catch { continue; }
+      const subExp = subPkg.exports?.['./client'];
+      const subRel = typeof subExp === 'string' && !subExp.includes('*') ? subExp
+        : (subExp && typeof subExp === 'object' ? Object.values(subExp).find(v => typeof v === 'string' && !v.includes('*')) : null);
+      if (typeof subRel !== 'string') continue;
+      const cand = join(root, ent.name, subRel);
+      if (existsSync(cand)) { resolved = cand; ctx.clientDeclared = true; break; }
+    }
+  }
+  ctx.clientPath = resolved;
+  ctx.clientText = resolved !== null ? readFileSync(resolved, 'utf8') : null;
   // 扫 skill 目录（skills/*/SKILL.md）
   const skillsRoot = join(root, 'skills');
   if (existsSync(skillsRoot)) {
@@ -330,6 +374,46 @@ function selfTest() {
     writeFileSync(join(badC, 'client.js'), `export const x = 1;\nwindow.__ModuleLoader__.load({ id: 'c', factory: () => ({}) });\n`);
     const rC = runChecks(badC);
     t('client.js 含 export → FAIL（拼接 parse 红）', rC.find((r) => r.id === 'crash.client-esm')?.status === 'FAIL');
+
+    // 坏项目 C2：浏览器半放在子目录，由 exports["./client"] 指向（dsh-toolwarden 的真实形态）。
+    // 只查包根 client.js 会让这条静默 PASS——证明判定式能跟着路径走。
+    const badC2 = join(work, 'bad-client-subdir');
+    mkdirSync(join(badC2, 'ui'), { recursive: true });
+    writeFileSync(join(badC2, 'package.json'), JSON.stringify({
+      name: '@local/c2', type: 'module',
+      exports: { '.': './index.js', './client': './ui/client.js' },
+      dsh: { bundle: { patch: './cordis.patch.yml' } },
+    }));
+    writeFileSync(join(badC2, 'cordis.patch.yml'), "- insert:\n    - id: c2\n      name: '@local/c2'\n");
+    writeFileSync(join(badC2, 'index.js'), `export const name = 'c2';\nexport const inject = [];\nexport function apply() {}\n`);
+    writeFileSync(join(badC2, 'ui', 'client.js'), `export const x = 1;\nwindow.__ModuleLoader__.load({ id: 'c2', factory: () => ({}) });\n`);
+    t('子目录 client.js 含 export → FAIL（不再静默跳过）',
+      runChecks(badC2).find((r) => r.id === 'crash.client-esm')?.status === 'FAIL');
+
+    // 坏项目 C2b：浏览器半在子包（ui/package.json 声明 ./client，根不声明）——dsh-tool-keeper 的真实形态。
+    // 既不漏检根目录，也不因「根 manifest 没声明」而静默跳过。
+    const badC2b = join(work, 'bad-client-subpkg');
+    mkdirSync(join(badC2b, 'ui'), { recursive: true });
+    writeFileSync(join(badC2b, 'package.json'), JSON.stringify({ name: '@local/c2b', type: 'module', dsh: { bundle: { patch: './cordis.patch.yml' } } }));
+    writeFileSync(join(badC2b, 'cordis.patch.yml'), "- insert:\n    - id: c2b\n      name: '@local/c2b'\n");
+    writeFileSync(join(badC2b, 'index.js'), `export const name = 'c2b';\nexport const inject = [];\nexport function apply() {}\n`);
+    writeFileSync(join(badC2b, 'ui', 'package.json'), JSON.stringify({ name: '@local/c2b-ui', type: 'module', exports: { '.': './index.js', './client': './client.js' } }));
+    writeFileSync(join(badC2b, 'ui', 'client.js'), `export const x = 1;\nwindow.__ModuleLoader__.load({ id: 'c2b', factory: () => ({}) });\n`);
+    t('子包 ui/ 里的 client.js 含 export → FAIL',
+      runChecks(badC2b).find((r) => r.id === 'crash.client-esm')?.status === 'FAIL');
+
+    // 坏项目 C3：声明了 ./client 但文件不存在——宿主会加载失败，不能算 Host 半跳过。
+    const badC3 = join(work, 'declared-client-missing');
+    mkdirSync(badC3, { recursive: true });
+    writeFileSync(join(badC3, 'package.json'), JSON.stringify({
+      name: '@local/c3', type: 'module',
+      exports: { '.': './index.js', './client': './ui/client.js' },
+      dsh: { bundle: { patch: './cordis.patch.yml' } },
+    }));
+    writeFileSync(join(badC3, 'cordis.patch.yml'), "- insert:\n    - id: c3\n      name: '@local/c3'\n");
+    writeFileSync(join(badC3, 'index.js'), `export const name = 'c3';\nexport const inject = [];\nexport function apply() {}\n`);
+    t('声明了 ./client 但文件缺失 → FAIL',
+      runChecks(badC3).find((r) => r.id === 'crash.client-esm')?.status === 'FAIL');
 
     // 好项目：全绿（除家族④ UNVERIFIABLE）
     const good = join(work, 'good');

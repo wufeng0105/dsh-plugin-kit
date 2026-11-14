@@ -3,6 +3,32 @@
 本文件记录所有值得注意的变更。
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.2.1] - 2026-11-14
+
+### 升级到 DSH 0.2.2-rc.3：修好「升级保鲜」这条路径本身
+
+**背景**：宿主从 rc.2 升到 rc.3 后按 skill §三 的流程实际执行了一遍，发现两个**真 bug**——「升级保鲜」这套能力此前只在 `--check` 分支被验证过，真正重解时会崩。
+
+#### 修复（升级流程实测发现）
+
+| 修 | 症状 | 原因 |
+|---|---|---|
+| `scripts/reextract.mjs` 重解必崩 | 文件已全部写完，然后 `ENOENT` 崩掉，`VERSION.json` 停在旧版本号（副本内容已是新的，元数据是旧的——比崩溃本身更难查） | 版本号有第二个来源读 `stages/p1.5/t2-dsh-skill/package.json`，而 `stages/` 已随阶段门退役删除 |
+| `reextract.mjs --check` 结论虚高 | 同一文件既报 `CHANGED` 又报 `GONE`，diff 计数翻倍 | `CHANGED` 分支没有从 `current` 摘除，循环结束后被当成残留项 |
+| `test/readme-claims.mjs` 每次升级必红 | 把 `dsh == "0.2.2-rc.2"` 写成硬断言 | 把宿主版本号当成了常量——那不是缺陷，是升级的必然结果 |
+
+#### 新增
+
+- `scripts/gen-host-snapshot.mjs`：从当前宿主 inspect 结果生成 `assets/touchpoints.json` 与 `assets/host-snapshot.json`，让 `recheck` 有真实清单可跑（此前仓库里只有 sample）。
+- README「升级保鲜」一节补全为完整命令序列（含生成快照这一步）。
+
+#### 升级实测结果（rc.2 → rc.3）
+
+- 文档副本：43 文件，**只有 1 行内容变化**（`packages.md` 新增 `dsh-deepseek-chat-import` 一行）；`VERSION.json` → `dsh=0.2.2-rc.3`。
+- 触点复检：**9 条中 8 OK / 0 MISSING / 0 CHANGED / 1 UNVERIFIABLE**。`skills.registerProvider`、`tools.register/restrict/guard`、`agent/created`(serial)、`webServer.register` 全部成立。
+- inspect provider 目录：仍 9 个，形状未变。
+- 未验证：`settings.section` Slot（客户端探测，需页面在线时人工核对）。
+
 ## [0.2.0] - 2026-11-13
 
 ### 产品重定义：从阶段门到契约查证与完成验证（breaking）

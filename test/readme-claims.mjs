@@ -179,10 +179,14 @@ claim('家族:四家族在文档', 'SKILL.md 载明四大失败家族', () => {
 });
 
 // ---- host-skills
-claim('副本:VERSION', 'host-skills/VERSION.json 声明 rc.2 且 asarBytes 有值', () => {
+// 断言的是「VERSION.json 的结构与自洽」，不是某个具体宿主版本号。
+// 硬写 rc.2 会让每次宿主升级都把这条守卫打红——那不是发现缺陷，只是把版本号当成了常量。
+// 真正要与 asar 对齐的判定在 scripts/reextract.mjs --check（它读本机 asar 实测）。
+claim('副本:VERSION', 'host-skills/VERSION.json 结构完整（dsh 版本号 / extractedAt / asarBytes）', () => {
   const v = JSON.parse(readFileSync(join(SKILL_DIR, 'host-skills', 'VERSION.json'), 'utf8'));
-  assert.equal(v.dsh, '0.2.2-rc.2', `dsh=${v.dsh}`);
+  assert.ok(/^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/.test(String(v.dsh)), `dsh=${v.dsh} 不是合法版本号`);
   assert.ok(typeof v.extractedAt === 'string' && v.extractedAt.length > 0, '缺 extractedAt');
+  assert.ok(!Number.isNaN(Date.parse(v.extractedAt)), `extractedAt=${v.extractedAt} 不是合法时间`);
   assert.ok(Number.isFinite(v.asarBytes) && v.asarBytes > 0, '缺 asarBytes');
   return `dsh=${v.dsh} extractedAt=${v.extractedAt}`;
 });
@@ -223,9 +227,11 @@ claim('退役:lib 只剩 skill-provider', 'lib/ 目录只有 skill-provider.js',
 });
 
 // ---- D 阶段：生命周期文档的承诺
+// 断言「package.json 与 CHANGELOG 彼此一致」，不是「版本号等于某个常量」。
+// 硬写 0.2.0 会让每次升版都把这条守卫打红——升版是正确的，守卫不该拦它。
 claim('D:版本号', 'CHANGELOG 声称的版本与实际 package.json 一致', () => {
   const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '0.2.0', `version=${pkg.version}（重定义后的首个版本）`);
+  assert.ok(/^\d+\.\d+\.\d+$/.test(pkg.version), `version=${pkg.version} 不是纯 x.y.z`);
   const changelog = readFileSync(join(ROOT, 'CHANGELOG.md'), 'utf8');
   assert.ok(changelog.includes(`[${pkg.version}]`), `CHANGELOG 里没有 [${pkg.version}] 这一节`);
   return `v${pkg.version}`;

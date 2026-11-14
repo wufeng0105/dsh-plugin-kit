@@ -1,6 +1,6 @@
 {
   "name": "@wufeng0105/dsh-plugin-kit",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "DSH 插件开发的契约查证与完成验证：查宿主契约的三步顺序、四大失败家族的首装自检脚本、升级后的触点复检，随宿主版本保鲜。",
   "license": "MIT",

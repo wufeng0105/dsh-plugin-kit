@@ -107,7 +107,8 @@ function main() {
     for (const f of files) {
       const cur = current.get(f.path);
       if (cur === undefined) { console.log(`  NEW      ${f.path} (${f.entry.size}B)`); diff += 1; }
-      else if (cur !== f.entry.size) { console.log(`  CHANGED  ${f.path} (工作区 ${cur}B vs asar ${f.entry.size}B)`); diff += 1; }
+      // CHANGED 也要从 current 里摘掉，否则循环结束后会被误判成 GONE（同一文件报两次、diff 虚高）。
+      else if (cur !== f.entry.size) { console.log(`  CHANGED  ${f.path} (工作区 ${cur}B vs asar ${f.entry.size}B)`); diff += 1; current.delete(f.path); }
       else current.delete(f.path);
     }
     for (const rel of current.keys()) { console.log(`  GONE     ${rel}（asar 里已不存在）`); diff += 1; }
@@ -131,9 +132,11 @@ function main() {
     n += 1;
   }
   // 更新 VERSION.json
+  // dsh 版本号从 asar 的 dsh/package.json 拿（唯一可靠来源）。
+  // 曾有第二个来源读 `stages/p1.5/t2-dsh-skill/package.json`，但 stages/ 已随阶段门退役删除，
+  // 该读取会让重解在写完文件后崩掉、VERSION.json 停在旧值——已移除。
   const nextVersion = {
-    dsh: JSON.parse(readFileSync(join(ROOT, 'stages', 'p1.5', 't2-dsh-skill', 'package.json'), 'utf8')).version
-      ?? process.env.DSH_VERSION ?? 'unknown',
+    dsh: process.env.DSH_VERSION ?? 'unknown',
     extractedAt: new Date().toISOString(),
     source: 'app.asar/dsh/node_modules/@deepseek-ai/dsh-agent-preset/skills（rc.2 起四份旧 skill 已合并为 dsh-doc）',
     asarBytes: fd.length,

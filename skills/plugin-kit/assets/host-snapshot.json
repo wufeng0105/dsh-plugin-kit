@@ -1,0 +1,70 @@
+{
+  "_comment": "本仓依赖的宿主触点快照。由 scripts/gen-host-snapshot.mjs 从 cordis_inspect_query 的结果整理；升级后重跑它对比。",
+  "host": {
+    "version": "0.2.2-rc.3",
+    "exportedAt": "2026-11-14T07:28:25.659Z",
+    "source": "cordis_inspect_query（host Service.listService / Event.listEvents / Config.listConfigs）"
+  },
+  "services": {
+    "skills": {
+      "description": "Layered registry of skill providers（plugin-kit 的 Host 半用它注册 skill）",
+      "methods": {
+        "registerProvider": "registerProvider(create: (control: SkillProviderControl) => SkillProvider): () => void",
+        "register": "register(skill: SkillRegistration): () => void",
+        "list": "async list(options: SkillViewOptions = {}): Promise<SkillSummary[]>",
+        "get": "async get(name: string, options: SkillViewOptions = {}): Promise<SkillDefinition | undefined>",
+        "snapshot": "async snapshot(options: SkillViewOptions = {}): Promise<SkillCatalogSnapshot>"
+      },
+      "types": {
+        "SkillProvider": "export interface SkillProvider {\n    readonly name: string;\n    readonly list: (options: SkillLookupOptions) => Promise<readonly SkillCandidate[] | SkillProviderObservation>;\n    readonly get: (candidate: SkillCandidate, options: SkillLookupOptions) => Promise<SkillDefinition | undefined>;\n}",
+        "SkillResourceBase": "export type SkillResourceBase = {\n    readonly kind: 'directory';\n    readonly path: string;\n} | {\n    readonly kind: 'url';\n    readonly url: string;\n} | {\n    readonly kind: 'opaque';\n    readonly description: string;\n};",
+        "SkillDefinition": "export interface SkillDefinition extends SkillSummary {\n    readonly content: string;\n    readonly metadata?: Readonly<Record<string, unknown>>;\n}"
+      }
+    },
+    "tools": {
+      "description": "Concrete tool registry and scoped executor dispatcher.",
+      "methods": {
+        "register": "register(definition: ToolDefinition, options: ToolRegistrationOptions = {}): () => void",
+        "restrict": "restrict(filter: ToolRestriction): () => void",
+        "guard": "guard(guard: ToolGuard): () => void",
+        "get": "get(name: string, scope?: ScopeKey, toolSet?: ResolvedToolSet): ToolDefinition | undefined",
+        "definitions": "definitions(scope?: ScopeKey, toolSet?: ResolvedToolSet): readonly ToolDefinition[]",
+        "schemas": "schemas(scope?: ScopeKey, toolSet?: ResolvedToolSet): ToolSchema[]",
+        "execute": "async execute(input: ToolBatchInput): Promise<ToolBatchResult>"
+      }
+    },
+    "agents": {
+      "description": "Agent service (`ctx.agents`): tracks live agents.",
+      "methods": {
+        "list": "list(): Agent[]",
+        "get": "get(id: SessionId): Agent | undefined",
+        "register": "register(agent: Agent): ReturnType<Context['effect']>",
+        "announce": "async announce(agent: Agent, source: SessionStartSource, signal?: AbortSignal): Promise<void>"
+      }
+    },
+    "webServer": {
+      "description": "The browser HTTP carrier service.",
+      "methods": {
+        "register": "register(route: WebRoute | WebResourceRoute): () => void",
+        "getOrigin": "getOrigin(): string"
+      }
+    }
+  },
+  "events": {
+    "agent/created": {
+      "mode": "serial",
+      "signature": "'agent/created'(this: Scoped<Agent>, payload: { agent: Agent; source: SessionStartSource; signal?: AbortSignal }): undefined | Promise<undefined>"
+    },
+    "agent/disposed": {
+      "mode": "emit",
+      "signature": "'agent/disposed'(this: Scoped<Agent>, payload: { agent: Agent }): void"
+    },
+    "tools/change": {
+      "mode": "emit",
+      "signature": "'tools/change'(this: Scoped<ToolsService>): void"
+    }
+  },
+  "configs": {
+    "_comment": "本插件不导出 Config；此处仅留空占位，保持结构与 sample 一致。"
+  }
+}
