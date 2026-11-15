@@ -3,6 +3,17 @@
 本文件记录所有值得注意的变更。
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 文档收敛：读懂现状从 6 个入口收敛为 1 份
+
+- `README.md` 重写为唯一现状文档（292 行）：产品组成、查契约摘要、首装验证、升级保鲜、开发纪律（reviewer 协议并入）、词汇表（CONTEXT.md 并入，退役词清单原样保留）、历史与凭据指路、发布、限制、生命周期。
+- `CONTEXT.md`、`docs/reviewer.md` 并入 README 后删除（内容全数在场，原文在 git）。
+- `docs/field-review-2026-11-13-proposal.md` 迁 `evidence/audits/2026-11-13-field-review-proposal.md`——它是「纪律有效」的凭据，不是现行主张。
+- 职责拆名：README 面把 preflight/recheck 的职责分别称「首装验证」「升级复检」，不再合称「完成验证」（落盘 field-review 提案 F5 遗留项；SKILL.md 正文不在本批范围）。
+- `test/readme-claims.mjs` 新增 5 条防漂移守卫（四家族 / 退役词 / 证据等级 / 纪律双源 / 链接存在），红证明已做：改坏 → 红 → 还原 → 绿。
+- 账本与逐格裁决留痕：`evidence/doc-consolidation-2026-11-15.md`。
+
 ## [0.2.1] - 2026-11-14
 
 ### 升级到 DSH 0.2.2-rc.3：修好「升级保鲜」这条路径本身

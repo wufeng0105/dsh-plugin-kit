@@ -305,6 +305,60 @@ claim('E2E4', 'README 写明重解与 preflight 怎么跑', () => {
   return '有复跑说明';
 });
 
+// ---- 文档收敛（2026-11-15：CONTEXT.md / docs/reviewer.md 并入 README 后的守卫）
+// 这组断言看守「唯一现状文档」的完整性——四家族 / 退役词 / 证据等级 / 链接。
+// CONTEXT.md 与 reviewer.md 已删，README 是它们内容的唯一现行住址，漂移即失守。
+
+claim('收敛:四家族', 'README 载明四大失败家族（原 SKILL 守卫的 README 面）', () => {
+  const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
+  for (const family of ['装不上', '装上了但看不见', '一加载就崩', '环境相关']) {
+    assert.ok(readme.includes(family), `README 缺失败家族「${family}」`);
+  }
+  return '四家族齐';
+});
+
+claim('收敛:退役词在场', 'README 词汇表保留全部退役词标记（语义防漂移锚点）', () => {
+  const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
+  for (const [re, label] of [
+    [/阶段门/, '阶段门'],
+    [/纪律段/, '纪律段'],
+    [/\.stage-gate\.json/, 'marker'],
+    [/九阶段/, '九阶段'],
+    [/作证台账/, '作证台账'],
+  ]) {
+    assert.ok(re.test(readme), `README 词汇表缺退役词「${label}」——退役词清单原样保留是 CONTEXT.md 并入的承重部分`);
+  }
+  return '五个退役词在位';
+});
+
+claim('收敛:证据等级', 'README 开发纪律节载明 L1–L4 证据等级（reviewer.md 并入的承重部分）', () => {
+  const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
+  for (const level of ['L1 运行时', 'L2 行为复现', 'L3 源码', 'L4 自述']) {
+    assert.ok(readme.includes(level), `README 缺证据等级「${level}」`);
+  }
+  assert.ok(/L3 不能冒充/.test(readme), 'README 缺「L3 不能冒充」硬要求');
+  return '四级齐 + 硬要求在位';
+});
+
+claim('收敛:纪律双源', '六条开发纪律在 README 与 SKILL.md 同现（两处各承载一半读者）', () => {
+  const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
+  const skill = readFileSync(join(SKILL_DIR, 'SKILL.md'), 'utf8');
+  const anchors = ['能判真假', '必须带出处', '证明它会红', '产品在用', '无法判定', '必须真跑过'];
+  for (const a of anchors) {
+    assert.ok(readme.includes(a) && skill.includes(a), `纪律锚点「${a}」未在 README 与 SKILL.md 双源同现`);
+  }
+  return `${anchors.length} 个锚点双源在位`;
+});
+
+claim('收敛:链接存在', 'README 的每个仓库内相对链接都真实存在（收敛后按名回指不出死链）', () => {
+  const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
+  const links = [...readme.matchAll(/\]\(([^)#][^)]*)\)/g)].map((m) => m[1]).filter((h) => !/^[a-z][a-z0-9+.-]*:/i.test(h));
+  assert.ok(links.length > 0, 'README 一个仓库内链接都没有——锚点失效');
+  const missing = links.filter((rel) => !existsSync(join(ROOT, rel)));
+  assert.ok(missing.length === 0, 'README 引用了不存在的路径：' + JSON.stringify(missing));
+  return `${links.length} 个链接全部存在`;
+});
+
 // ================================================================ 汇总
 
 const failed = results.filter((r) => !r.ok);
