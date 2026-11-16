@@ -274,12 +274,25 @@ rc.2 → rc.3 实测：文档副本 43 文件只有 1 行内容变化；触点 9
 node scripts/release.mjs --check          # 只核对现状（七项），不改任何东西
 node scripts/release.mjs patch|minor|major # 升版 + 提交 + 打 tag（跑全量验证门后才动）
 git push origin main --follow-tags
-npm run publish:npm                        # 内部先跑 check + pack 干跑，再发
+npm run publish:npm                        # 内部先跑 check + pack 干跑 + publish + 核实
 ```
 
 `release.mjs` 的七项核对：版本是纯 `x.y.z`、CHANGELOG 有对应节、tag 不存在、工作树干净、分支是 main 且已同步、npm 上该版本不存在、`repository` 指回本仓。任何一项不过就拒绝继续。
 
-**脚本不代做 push 与 publish**——两个不可撤销的外部动作，执行权留给人。发布后核对：`npm view @wufeng0105/dsh-plugin-kit version --registry=https://registry.npmjs.org/`。
+**脚本不代做 push 与 publish**——两个不可撤销的外部动作，执行权留给人。
+
+### npm registry 与「发布成功」的判据
+
+本仓带一个项目级 `.npmrc`，把 **本目录内**的 npm 命令固定到官方源 `registry.npmjs.org`；全局 registry 仍是国内镜像，日常安装速度不受影响。`package.json` 的 `publishConfig` 是双保险（换目录发布也不会发错源）。
+
+**「发布成功」的唯一判据是官方源版本端点能查到**，不是 `npm publish` 的退出码——它会打印 `+ 包@版本` 并 exit 0，而 CDN 传播要几分钟，期间查询全是 404：
+
+```bash
+npm run publish:verify      # 官方源核实（--wait 最多等 8 分钟）
+node scripts/verify-publish.mjs 0.3.0   # 核指定版本
+```
+
+判 404 时按概率排查三条：① 刚发布，CDN 在传播（等，或 `--wait`）；② 真没发出去——查 publish 日志有没有 `http fetch PUT 202`，只有 GET 没有 PUT 才是真没发；③ 查的不是官方源。
 
 > 首次发布时 packument（包根索引）会比版本端点晚几分钟生效，期间 `npm install` 报 404 而 tarball 直链已可下载——这是 CDN 传播，不是发布失败。
 

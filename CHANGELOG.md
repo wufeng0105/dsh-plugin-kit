@@ -3,6 +3,17 @@
 本文件记录所有值得注意的变更。
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 发布流程：把「发布后核实」做成机判（2026-11-17）
+
+0.3.0 发布时踩到：`npm publish` 打印 `+ 包@版本` 且 exit 0，但紧随的查询连续 404，一度被误判为发布失败。根因两条——本机全局 registry 是 npmmirror 镜像（查的是镜像旧索引），官方源 CDN 传播需数分钟。
+
+- 新增 `scripts/verify-publish.mjs`：「发布成功」的唯一判据改为官方源版本端点能查到；支持 `--wait`（最多 8 分钟）、超时与 404 三条原因排查提示。正反例已实测（0.3.0 绿 / 9.9.9 红）。
+- 新增项目级 `.npmrc`：本目录内 npm 命令固定官方源；全局 registry 不变，日常安装速度不受影响。
+- `package.json` 加 `publishConfig`（registry + access public）作双保险；`publish:npm` 改为 `publish → verify --wait`，新增 `publish:verify`。
+- README 发布节改写：说明 registry 分层与「发布成功」判据。
+
 ## [0.3.0] - 2026-11-17
 
 ### 设计期落点：两个 skill 的工件成了可机判的检查
