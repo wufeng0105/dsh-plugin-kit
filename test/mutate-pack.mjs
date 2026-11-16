@@ -66,8 +66,8 @@ const results = [];
   const f = `${ROOT}/skills/plugin-kit/SKILL.md`;
   const orig = readFileSync(f, 'utf8');
   const patched = orig.replace(
-    '## 二、完成验证',
-    '## 二、完成验证\n\n参见 `scripts/ghost-does-not-exist.mjs`。\n',
+    '## 二、首装验证',
+    '## 二、首装验证\n\n参见 `scripts/ghost-does-not-exist.mjs`。\n',
   );
   const changed = patched !== orig;
   writeFileSync(f, patched, 'utf8');

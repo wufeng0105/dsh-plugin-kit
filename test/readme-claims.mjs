@@ -309,12 +309,15 @@ claim('E2E4', 'README 写明重解与 preflight 怎么跑', () => {
 // 这组断言看守「唯一现状文档」的完整性——四家族 / 退役词 / 证据等级 / 链接。
 // CONTEXT.md 与 reviewer.md 已删，README 是它们内容的唯一现行住址，漂移即失守。
 
-claim('收敛:四家族', 'README 载明四大失败家族（原 SKILL 守卫的 README 面）', () => {
+claim('收敛:四家族', '四大失败家族的正典在 SKILL.md，README 只指路不复述', () => {
   const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
+  const skill = readFileSync(join(SKILL_DIR, 'SKILL.md'), 'utf8');
   for (const family of ['装不上', '装上了但看不见', '一加载就崩', '环境相关']) {
-    assert.ok(readme.includes(family), `README 缺失败家族「${family}」`);
+    assert.ok(skill.includes(family), `SKILL.md 缺失败家族「${family}」`);
   }
-  return '四家族齐';
+  // README 必须指到 SKILL.md 的失败家族节，且不得再整表复述（一体成文：一处说清）。
+  assert.ok(/SKILL\.md.*§二|§二.*SKILL\.md/.test(readme), 'README 必须指路 SKILL.md §二（失败家族正典）');
+  return '正典在 SKILL.md，README 指路';
 });
 
 claim('收敛:退役词在场', 'README 词汇表保留全部退役词标记（语义防漂移锚点）', () => {
@@ -340,14 +343,16 @@ claim('收敛:证据等级', 'README 开发纪律节载明 L1–L4 证据等级�
   return '四级齐 + 硬要求在位';
 });
 
-claim('收敛:纪律双源', '六条开发纪律在 README 与 SKILL.md 同现（两处各承载一半读者）', () => {
+claim('收敛:纪律单源', '六条纪律只在 SKILL.md 正典，README 指路不复述', () => {
   const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
   const skill = readFileSync(join(SKILL_DIR, 'SKILL.md'), 'utf8');
   const anchors = ['能判真假', '必须带出处', '证明它会红', '产品在用', '无法判定', '必须真跑过'];
   for (const a of anchors) {
-    assert.ok(readme.includes(a) && skill.includes(a), `纪律锚点「${a}」未在 README 与 SKILL.md 双源同现`);
+    assert.ok(skill.includes(a), `SKILL.md 缺纪律锚点「${a}」`);
   }
-  return `${anchors.length} 个锚点双源在位`;
+  // README 指路即可；若六条又整段贴回 README，就是重新变成双源（一体成文：一处说清）。
+  assert.ok(/SKILL\.md.*§四|§四.*SKILL\.md/.test(readme), 'README 必须指路 SKILL.md §四（六条纪律正典）');
+  return '正典在 SKILL.md，README 指路';
 });
 
 claim('收敛:链接存在', 'README 的每个仓库内相对链接都真实存在（收敛后按名回指不出死链）', () => {
@@ -357,6 +362,46 @@ claim('收敛:链接存在', 'README 的每个仓库内相对链接都真实存�
   const missing = links.filter((rel) => !existsSync(join(ROOT, rel)));
   assert.ok(missing.length === 0, 'README 引用了不存在的路径：' + JSON.stringify(missing));
   return `${links.length} 个链接全部存在`;
+});
+
+// ---- 设计期落点（2026-11-17：两个 skill 的工件成为可机判落点）
+claim('设计期:SKILL 指路', 'SKILL.md 载明设计期两个 skill 与 design-check 脚本', () => {
+  const skill = readFileSync(join(SKILL_DIR, 'SKILL.md'), 'utf8');
+  for (const anchor of ['domain-modeling', 'codebase-design', 'design-check.mjs']) {
+    assert.ok(skill.includes(anchor), `SKILL.md 缺设计期锚点「${anchor}」`);
+  }
+  return '三锚点在位';
+});
+
+claim('设计期:骨架种子', 'template/CONTEXT.md 是词汇表种子（含示例占位与 _Avoid_ 示范）', () => {
+  const seed = readFileSync(join(SKILL_DIR, 'template', 'CONTEXT.md'), 'utf8');
+  assert.ok(seed.includes('**示例术语**'), '种子缺「示例术语」占位标记——首跑必红依赖它');
+  assert.ok(seed.includes('_Avoid_'), '种子缺 _Avoid_ 示范');
+  assert.ok(/## Language/.test(seed), '种子缺 ## Language 节');
+  return '种子在位';
+});
+
+claim('设计期:README 骨架计数', 'README 宣称的骨架文件数与 template/ 实际一致', () => {
+  const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
+  const m = /template\/[^\n]*?（(\d+)\s*文件/.exec(readme);
+  assert.ok(m !== null, 'README 找不到「template/…（N 文件）」的宣称');
+  const claimed = Number(m[1]);
+  let actual = 0;
+  (function walk(d) {
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      if (e.isDirectory()) walk(join(d, e.name));
+      else actual += 1;
+    }
+  })(join(SKILL_DIR, 'template'));
+  assert.equal(claimed, actual, `README 宣称骨架 ${claimed} 文件，实际 ${actual} 个`);
+  return `宣称 ${claimed} = 实际 ${actual}`;
+});
+
+claim('设计期:README ADR 计数', 'README 的 ADR 计数与实际 docs/adr 一致（四个决策）', () => {
+  const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
+  const n = readdirSync(join(ROOT, 'docs', 'adr')).filter((f) => f.endsWith('.md')).length;
+  assert.ok(readme.includes('四个决策') && n === 4, `README 宣称四个决策，实际 ${n} 份 ADR`);
+  return `${n} 份 ADR`;
 });
 
 // ================================================================ 汇总

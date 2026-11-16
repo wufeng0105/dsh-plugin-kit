@@ -1,16 +1,38 @@
 ---
 name: plugin-kit
-description: Use when developing, installing, or upgrading a DSH plugin — what the host requires, what to verify before claiming done, and how to keep both fresh after a DSH upgrade. Trigger on any DSH plugin, bundle, cordis, install, won't-load, button-does-nothing, or release question. Complements the host's dsh-doc, which holds the mechanisms themselves.
+description: Use when designing, developing, installing, or upgrading a DSH plugin — design-phase artifacts (glossary, ADR), what the host requires, what to verify before claiming done, and how to keep it fresh after a DSH upgrade. Trigger on any DSH plugin, bundle, cordis, install, won't-load, button-does-nothing, or release question. Complements the host's dsh-doc.
 ---
 
-# DSH 插件：契约查证与完成验证
+# DSH 插件：从设计到保鲜
 
 > 你在对着一个黑盒开发：**写之前不知道宿主要什么（契约），写完不知道它认不认（验证）。**
-> 这个 skill 把两面都变成可执行的程序。它不拦你、不替你判断质量——它让你在宣称「完成」之前，每一条都有据可查。
+> 这条流水线四段：设计期定概念与形状 → 写代码前查契约 → 装之前首装自检 → 升级后触点复检。
+> 它不拦你、不替你判断质量——它让你在宣称「完成」之前，每一条都有据可查。
 
 ## 给谁用
 
 **给已经会写 DSH 插件的人。** 还没装成功过一个最小插件的话，先去做那件事——装不上的时候，这里的每一条你都看不懂。
+
+## 设计期：定概念与形状（写代码之前）
+
+两个 skill 管这一段，动笔前加载并按其做法做：**`domain-modeling`**（概念：术语一物一名、边界场景压测、重大取舍写 ADR）与 **`codebase-design`**（结构：接口小、实现深、接缝只设在真有第二个适配器的地方）。
+
+落成工件（都在插件项目里，可被 `design-check.mjs` 机判）：
+
+- **词汇表**（`CONTEXT.md`，或 README 的词汇表节；模板已带种子）：`**术语**：一两句定义` + `_Avoid_: 弃用叫法`。第一个术语敲定就写，不攒批。
+- **ADR**（`docs/adr/NNNN-slug.md`）：难回头 + 无上下文会费解 + 真取舍三条全占才写；接口/接缝的取舍也记这里。
+
+**接口三问**（动笔前，答案写进交付说明或 ADR）：删掉这个导出/模块，复杂度去了哪？接缝另一侧真有第二个适配器（生产+测试）吗？依赖是参数传入还是模块内 `new` 的？
+
+**跑设计期核查**：
+
+```bash
+node <本skill目录>/scripts/design-check.mjs <你的插件项目根>
+```
+
+词汇表格式、ADR 命名/正文、标识符样式的弃用名（含 `_` / `.` / `/` 的旧词）出现在正文里都判 FAIL；普通弃用词只提示。首跑必红（模板种子是格式示例）——按补法换成第一条真实术语即绿。
+
+**三个脚本的分工（不互判）**：设计期跑 design-check（定概念与形状）；装前跑 preflight（判宿主契约与装败）；升级后跑 recheck（判触点漂移）。
 
 ## 一、查契约的三步顺序（痛点：宿主是黑盒）
 
@@ -50,7 +72,7 @@ description: Use when developing, installing, or upgrading a DSH plugin — what
 
 **每条关于宿主的断言必须带出处**（探测命令+返回，或安装包 `文件:行`）。读源码得出的结论标 L3，不冒充已验证。
 
-## 二、完成验证：preflight（痛点：「完成」没有权威定义）
+## 二、首装验证：preflight（痛点：「完成」没有权威定义）
 
 代码写完、测试全绿 ≠ 装上能用。四类致命失败**全都不在任何一段代码里**，逐段检查看不见：
 
@@ -110,17 +132,18 @@ node scripts/reextract.mjs          # 过期就重解（写回源码仓的 host-
 
 ## 五、新建一个插件项目
 
-**不要从零手写。** 复制骨架：`template/`（4 文件：package.json / cordis.patch.yml / index.js / AGENTS.md）。
+**不要从零手写。** 复制骨架：`template/`（5 文件：package.json / cordis.patch.yml / index.js / AGENTS.md / CONTEXT.md）。
 
 1. 整目录复制到项目根
-2. 把占位符 `my-plugin` 全部替换成本项目名（三处同步，改完搜一次 `my-plugin` 必须零残留）
-3. 跑 `preflight.mjs <项目根>` —— 0 FAIL 后再装
-4. 装一次（`install_bundle`，target 传项目绝对路径），读返回的 `application`——**骨架装得上，才算搭好了**
+2. 把占位符 `my-plugin` 全部替换成本项目名（三处同步，改完搜一次 `my-plugin` 必须零残留）；顺手把 `CONTEXT.md` 的「示例术语」换成第一条真实术语（design-check 首跑必红是设计期第一步）
+3. 跑 `design-check.mjs <项目根>` —— 0 FAIL 后再进装前自检
+4. 跑 `preflight.mjs <项目根>` —— 0 FAIL 后再装
+5. 装一次（`install_bundle`，target 传项目绝对路径），读返回的 `application`——**骨架装得上，才算搭好了**
 
 > 骨架里没有 `.gitignore`。不是漏了——npm 打包总会排除它，放一份会让仓库与包不一致（2026-11-11 实测）。加第一个依赖时自己建。
 
 ## 关键提醒
 
-- **测试全绿 ≠ 验收通过**。111 个测试全绿仍有 5 项验收无法通过，是真实发生过的事。
+- **测试全绿 ≠ 验收通过**：本仓 0.2.0 重定义期出现过 111 个测试全绿、仍有 5 项验收无法通过。
 - **inspect 是权威源**：任何「宿主支持/不支持 X」的断言，先 query 再写。
 - **证据等级不能冒充**：L3（源码核对）不能写成「已验证」。

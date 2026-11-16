@@ -6,9 +6,12 @@
 
 ## 开工前
 
-1. **用 `skill` 工具加载 `plugin-kit`**。查契约的三步顺序、完成验证、升级保鲜都在那里，本文不复述。
-2. 查宿主契约：**`cordis_inspect_query` 是权威源**（Service / Event / Config / Tools / Slots），文档副本 `host-skills/dsh-doc/`（在 plugin-kit 包里）讲机制原则，真实运行的同类插件源码讲装配。
-3. 每条关于宿主的断言必须带出处（探测命令+返回，或安装包 `文件:行`）。
+1. **设计期先加载 `domain-modeling` 与 `codebase-design`**，并把两件事做掉：
+   - 概念：第一个术语敲定就写进 `CONTEXT.md`（模板已带种子）——`**术语**：定义` + `_Avoid_: 弃用叫法`，一名一物，不攒批；难回头 + 无上下文会费解 + 真取舍三条全占的决策写 `docs/adr/NNNN-slug.md`。
+   - 形状：动笔前过**接口三问**（答案写进交付说明或 ADR）——删掉这个导出/模块，复杂度去了哪？接缝另一侧真有第二个适配器（生产+测试）吗？依赖是参数传入还是模块内 `new` 的？
+2. **用 `skill` 工具加载 `plugin-kit`**。查契约的三步顺序、首装验证、升级保鲜都在那里，本文不复述。
+3. 查宿主契约：**`cordis_inspect_query` 是权威源**（Service / Event / Config / Tools / Slots），文档副本 `host-skills/dsh-doc/`（在 plugin-kit 包里）讲机制原则，真实运行的同类插件源码讲装配。
+4. 每条关于宿主的断言必须带出处（探测命令+返回，或安装包 `文件:行`）。
 
 ## 最常踩的六条
 
@@ -28,12 +31,15 @@
 
 ## 交付前
 
-1. `node <plugin-kit包>/skills/plugin-kit/scripts/preflight.mjs <项目根>` —— 0 FAIL 才算预检过
-2. `npm pack` 后从 tarball 真加载一次
-3. **加第一个依赖时**，顺手建 `.gitignore`：`node_modules/`、`*.tgz`、`*.log`。（骨架没有依赖，所以还没建。骨架里不能预放 `.gitignore`：npm 打包会排除它，仓库与包就对不上了。）
-4. 升级 DSH 后：跑 `recheck.mjs`（触点复检，`<plugin-kit包>/skills/plugin-kit/scripts/`）；
+1. `node <plugin-kit包>/skills/plugin-kit/scripts/design-check.mjs <项目根>` —— 设计期工件 0 FAIL（首跑必红：种子是格式示例，按补法换成第一条真实术语）
+2. `node <plugin-kit包>/skills/plugin-kit/scripts/preflight.mjs <项目根>` —— 0 FAIL 才算预检过
+3. `npm pack` 后从 tarball 真加载一次
+4. **加第一个依赖时**，顺手建 `.gitignore`：`node_modules/`、`*.tgz`、`*.log`。（骨架没有依赖，所以还没建。骨架里不能预放 `.gitignore`：npm 打包会排除它，仓库与包就对不上了。）
+5. 升级 DSH 后：跑 `recheck.mjs`（升级复检，`<plugin-kit包>/skills/plugin-kit/scripts/`）；
    文档副本过期判定用 `reextract.mjs --check`——**该脚本只在 plugin-kit 源码仓有**（不随包分发），
    用法见 `plugin-kit` skill §三的两态说明
+
+两个自检分工不互判：design-check 判设计工件（词汇表/ADR/弃用名漂移），preflight 判宿主契约与装败。
 
 ## 不要做
 

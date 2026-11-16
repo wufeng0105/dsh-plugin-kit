@@ -1,6 +1,6 @@
 # dsh-plugin-kit
 
-> **一个包，两样东西**：契约查证顺序（skill）+ 验证脚本（preflight 首装自检 / recheck 升级复检），随宿主升级保鲜。
+> **一条流水线，四段**：设计期定概念与形状 → 写代码前查宿主契约 → 装之前首装自检 → 升级后触点复检。前两段住 skill 正文，后两段是脚本。
 
 装它，`plugin-kit` 这个 skill 自动出现在你的 skill 目录里。它**不拦任何调用、不记台账、不注入常驻提示**——旧形态（阶段门拦截 / 台账 / 纪律段）已于 2026-11-13 退役，决策记录见 [`docs/adr/`](docs/adr/)。
 
@@ -13,7 +13,7 @@
 | **宿主是黑盒** | 契约（接缝、事件签名、Config 形状、加载方式）全在宿主运行时与约 208MB 的 app.asar 里（rc.2 时代实测 208,137,981 字节；rc.3 为 209,021,953，见 `skills/plugin-kit/host-skills/VERSION.json`），shell 工具打不开；离线合法的代码宿主里可能非法 |
 | **「完成」没有权威定义** | 代码写完、测试全绿之后，没人告诉你什么算装上了、什么算能用了；DSH 升级后同一问题再来一遍 |
 
-这个包把两面都变成可执行的程序：**写之前**按三步查契约，**装之前**跑 preflight，**升级之后**跑 recheck + 重解。
+这个包把流水线四段都变成可执行的程序：**设计期**跑 design-check 判工件，**写之前**按三步查契约，**装之前**跑 preflight，**升级之后**跑 recheck + 重解。
 
 ## 产品组成
 
@@ -24,6 +24,7 @@
 | **SKILL.md** | `skills/plugin-kit/` | 判据正文：查契约三步顺序、四大失败家族、开发纪律六条 |
 | **preflight.mjs** | `skills/plugin-kit/scripts/` | 首装自检：四大失败家族逐条核查，输出 PASS / FAIL / UNVERIFIABLE，FAIL 附「缺什么、怎么补」 |
 | **recheck.mjs** | `skills/plugin-kit/scripts/` | 升级复检：拿触点清单对照宿主快照，输出 OK / MISSING / CHANGED / UNVERIFIABLE 四态 |
+| **design-check.mjs** | `skills/plugin-kit/scripts/` | 设计期核查：词汇表格式、ADR 命名/正文、标识符样式的弃用名漂移；FAIL 附「缺什么、怎么补、依据」 |
 | **reextract.mjs** | `scripts/`（仅源码仓） | asar 解析与宿主文档重解：`--check` 过期判定 + 一键重解；不随 npm 包分发（它要读本机 app.asar 的绝对路径） |
 | **gen-host-snapshot.mjs** | `scripts/`（仅源码仓） | 从当前宿主 inspect 结果生成触点清单与宿主快照，让 recheck 有真实清单可跑 |
 | **Host 半** | `index.js` + `lib/skill-provider.js` | 只做一件事：把 `skills/` 注册进宿主 skill 目录。无用户配置、无事件监听、无工具注册 |
@@ -42,12 +43,12 @@ dsh-plugin-kit/
 ├── lib/skill-provider.js    skill 扫描与定义校验
 ├── skills/plugin-kit/       产品本体
 │   ├── SKILL.md             判据正文（装进宿主的就是它）
-│   ├── scripts/             preflight.mjs / recheck.mjs（随包分发）
-│   ├── template/            新插件项目骨架（4 文件）
+│   ├── scripts/             preflight.mjs / recheck.mjs / design-check.mjs（随包分发）
+│   ├── template/            新插件项目骨架（5 文件：含词汇表种子 CONTEXT.md）
 │   ├── assets/              触点清单 / 宿主快照样例
 │   └── host-skills/         dsh-doc 副本（43 文件）+ VERSION.json
 ├── scripts/                 reextract.mjs / gen-host-snapshot.mjs / release.mjs（仅源码仓）
-├── docs/adr/                三个决策记录
+├── docs/adr/                四个决策记录
 ├── evidence/                凭据：裁定书、真机存证、验收记录、探针脚本、文档收敛账本
 ├── test/                    全部验证入口见 npm run check
 └── CHANGELOG.md             版本历史（0.2.0 重定义 + 0.1.x 事故出处表）
@@ -70,6 +71,21 @@ plugin_manager install_bundle target=<本目录绝对路径>
 - skill 目录里出现 `plugin-kit`：让模型列出可用 skill，应含 `plugin-kit`。
 - 启动日志应有两行 info：`[plugin-kit] v<版本> 已加载 → cwd=…` 与 `skill provider 已注册 → name=plugin-kit root=…`。有一条 `error`（「打包缺失：skills/ 目录不存在」）就说明插件是残的。
 
+## 设计期：定概念与形状（写代码之前）
+
+先加载 `domain-modeling`（概念：术语一物一名、边界场景压测、重大取舍写 ADR）与 `codebase-design`（结构：接口小、实现深、接缝只设在真有第二个适配器的地方），把两样工件落成：
+
+- **词汇表**（`CONTEXT.md`，或 README 的词汇表节；模板已带种子）：`**术语**：一两句定义` + `_Avoid_: 弃用叫法`——第一个术语敲定就写，不攒批。
+- **ADR**（`docs/adr/NNNN-slug.md`）：难回头 + 无上下文会费解 + 真取舍三条全占才写；接口/接缝的取舍也记这里。
+
+**接口三问**（动笔前，答案写进交付说明或 ADR）：删掉这个导出/模块，复杂度去了哪？接缝另一侧真有第二个适配器（生产+测试）吗？依赖是参数传入还是模块内 `new` 的？
+
+```bash
+node skills/plugin-kit/scripts/design-check.mjs <你的插件项目根>
+```
+
+词汇表格式、ADR 命名/正文、标识符样式的弃用名（含 `_` / `.` / `/` 的旧词）出现在正文里判 FAIL；普通弃用词只提示。首跑必红（种子是格式示例）——按补法换成第一条真实术语即绿。三个脚本分工不互判：设计期 design-check / 装前 preflight / 升级后 recheck。
+
 ## 查契约的三步（摘要在 skill 正文）
 
 1. **`cordis_inspect_query`** —— 权威源。Service 方法、事件名/mode/签名、Config schema。事件全集（如 rc.2 的 `fs/write-intent`）只在 inspect 里，任何文档都没有逐条清单。
@@ -80,14 +96,7 @@ plugin_manager install_bundle target=<本目录绝对路径>
 
 ## 首装验证：preflight
 
-代码写完、测试全绿 ≠ 装上能用。四类致命失败**全都不在任何一段代码里**，逐段检查看不见（每条判定式都有真机事故出处）：
-
-| 家族 | 典型形态 | 在哪暴露 |
-|---|---|---|
-| ① 装不上 | 缺 `dsh.bundle.patch`；patch 的 name 与包名不一致；`Config = {}`；inject 猜了不存在的服务 | install 那一刻 |
-| ② 装上了但看不见 | skill 缺 resourceBase（模型不知道文件在哪）；slot 注册塞进 inject 回调 | 用户打开界面那一刻 |
-| ③ 一加载就崩 | client.js 含 ESM export——宿主把所有插件 client.js **拼成一个大脚本**，一个坏插件让整个 web boot 崩 | 重启那一刻 |
-| ④ 环境相关 | 最小 profile 能用、混进完整插件集崩（日志无堆栈） | 换环境那一刻 |
+代码写完、测试全绿 ≠ 装上能用。四类致命失败**全都不在任何一段代码里**，逐段检查看不见——完整判定式与事故出处见 [`SKILL.md` §二](skills/plugin-kit/SKILL.md)，此处不复述。
 
 ```bash
 # 装之前、每次交付前
@@ -97,7 +106,7 @@ node skills/plugin-kit/scripts/preflight.mjs <你的插件项目根>
 - 逐项输出 `PASS / FAIL / UNVERIFIABLE`，FAIL 附「缺什么、怎么补」。
 - `UNVERIFIABLE` 不是通过：按提示人工验，验完自己记结论。
 - 自带 `--self-test`——**先证明判定式会红，再用它判你的项目**。
-- 家族④只能真机验：用**一次性 profile**（建 → 装 → 验 → 拆，复刻目标环境的完整 bundle 组合，不碰日常 profile）。具体命令随宿主版本变，真跑 `dsh --help` / `dsh plugin --help` 现取。
+- 家族④（环境相关）只能真机验：用**一次性 profile**（建 → 装 → 验 → 拆，复刻目标环境的完整 bundle 组合，不碰日常 profile）。具体命令随宿主版本变，真跑 `dsh --help` / `dsh plugin --help` 现取。
 
 ## 升级复检与重解（保鲜）
 
@@ -127,14 +136,9 @@ rc.2 → rc.3 实测：文档副本 43 文件只有 1 行内容变化；触点 9
 
 > **审查员的价值不在「多一双眼睛」，而在「它没参与写，所以没有立场替写的人找理由」。** 审查员曾是本插件的产品能力，2026-11-13 降级为本仓开发纪律（ADR 0001）——它在两轮审查中各抓出两条 MAJOR，实证有效。协议原文在 git（原 `docs/reviewer.md`，2026-11-15 并入本节）。
 
-六条（本仓事故换来的，任何插件开发通用）：
+**六条纪律的正典在 [`SKILL.md` §四](skills/plugin-kit/SKILL.md)**（每装一个包就会读到），本文不复述。
 
-1. **每条验收必须能判真假**；靠人看的必须给机判替代，否则标「人工判读」。
-2. **每条关于宿主的断言必须带出处**（探测命令+返回，或安装包 `文件:行`）。
-3. **任何检查先证明它会红**，再用它判通过——改坏 → 红 → 改回 → 绿。「测试全绿」是一个状态，不是一项证据。
-4. **模块存在 ≠ 产品在用**：必须证明它在 import 图里可达。
-5. **「无法判定」不是「通过」**：探测不到就标 `UNVERIFIABLE`，写明证据等级。
-6. **交付说明里的命令必须真跑过。**
+本仓额外收着的三样（只在派独立审查员时用）：
 
 证据等级（每条结论都要标；L3 不能冒充 L1/L2）：
 
@@ -211,11 +215,19 @@ rc.2 → rc.3 实测：文档副本 43 文件只有 1 行内容变化；触点 9
 
 **宿主快照**：用 inspect 导出的当前宿主契约事实集合（服务/事件/Config），recheck 的输入之一。
 
+**设计期核查**：`skills/plugin-kit/scripts/design-check.mjs`——判词汇表/ADR 格式与标识符样式的弃用名漂移，FAIL 附补法与依据。_Avoid_: 文档检查（不带名）
+
+**词汇表**：术语一物一名的正典（`CONTEXT.md` 或 README 词汇表节）。_Avoid_: 术语表、glossary
+
+**ADR**：`docs/adr/NNNN-slug.md`——难回头的决策记录（三门槛：难回头 + 无上下文费解 + 真取舍）。
+
 **preflight**：首装自检脚本（`skills/plugin-kit/scripts/preflight.mjs`）。_Avoid_: 自检（不带名）、smoke
 
-**recheck**：升级复检脚本（`skills/plugin-kit/scripts/recheck.mjs`）。_Avoid_: 复检（不带名）
+**首装验证**：preflight 管的那一段职责名（装之前判宿主契约与四大装败家族）。
 
-**拆名**：skill 正文把两件事合称「完成验证」——本 README 按职责拆称：**首装验证**（preflight 管的）与**升级复检**（recheck 管的）。两处说的是同一套脚本。preflight 词条保留 CONTEXT 原文「首装自检脚本」的叫法——那是脚本定义名，不是职责名。
+**升级复检**：recheck 管的那一段职责名（升级后判触点是否还成立）。
+
+**recheck**：升级复检脚本（`skills/plugin-kit/scripts/recheck.mjs`）。_Avoid_: 复检（不带名）
 
 ### 退役词（历史语义，勿在新文档使用）
 
@@ -233,11 +245,12 @@ rc.2 → rc.3 实测：文档副本 43 文件只有 1 行内容变化；触点 9
 
 历史材料默认不进阅读路径；要复核结论怎么来的，再进。
 
-**三个决策（[`docs/adr/`](docs/adr/)，各一句话）：**
+**四个决策（[`docs/adr/`](docs/adr/)，各一句话）：**
 
 - **0001 核心目标重定义**：凡被证实的能力都是「证据或证据的纪律」，凡被证伪的都是「替代信任」——产品从流程门收敛为黑盒翻译器。
 - **0002 拦截层废弃**：fail-closed（17 拦 0 真阳性）与 fail-open（shell 4 形态全绕过）双输；rc.2 的 `fs/*-intent` 接缝只解决「怎么拦得准」，解决不了「该不该拦」。
 - **0003 作证台账搁置**：好想法、错的证据基础（痛点论证完全依赖单作者实验记录）；搁置非废弃，复活条件三条全列在 ADR 里。
+- **0004 设计期核查**：把 domain-modeling 与 codebase-design 的工件做成机判（词汇表/ADR 格式 + 特征词漂移）；入口导出面归 preflight，两脚本不互判。
 
 **凭据目录（[`evidence/README.md`](evidence/README.md) 是入口）：**
 
@@ -278,6 +291,7 @@ npm run publish:npm                        # 内部先跑 check + pack 干跑，
 | 「环境相关」家族 UNVERIFIABLE | 插件间冲突只能真机验（复刻完整 bundle 组合的一次性 profile） |
 | 文档副本会过期 | 宿主升级后在**源码仓**跑 `node scripts/reextract.mjs --check`（该脚本不随 npm 包分发）；不做激活时自动同步（拿稳定性换新鲜度不划算） |
 | inspect 不可达时判不了 | 没有宿主运行时，契约只能读到 L3（源码核对），不冒充已验证 |
+| design-check 只判工件格式与特征词漂移 | 接口深度、接缝位置、依赖注入是人工判读（UNVERIFIABLE 给判法）；入口导出面归 preflight 判 |
 | 证据边界 | 「四大失败家族」是单作者事故史归纳，「换人也遇到」未验证；`fs/*-intent` 的 actor 字段能否解出 session 身份是 L3 推断（承 ADR 0003） |
 
 ## 生命周期

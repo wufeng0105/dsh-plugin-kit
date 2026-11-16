@@ -2,7 +2,7 @@
   "name": "@wufeng0105/dsh-plugin-kit",
   "version": "0.2.1",
   "type": "module",
-  "description": "DSH 插件开发的契约查证与完成验证：查宿主契约的三步顺序、四大失败家族的首装自检脚本、升级后的触点复检，随宿主版本保鲜。",
+  "description": "DSH 插件的一条流水线：设计期定概念与形状（词汇表/ADR 机判）、写代码前查宿主契约的三步顺序、装之前的首装验证、升级后的触点复检，随宿主版本保鲜。",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -37,14 +37,14 @@
     "LICENSE"
   ],
   "scripts": {
-    "test": "node --test test/skill-provider.test.mjs test/preflight.test.mjs",
+    "test": "node --test test/skill-provider.test.mjs test/preflight.test.mjs test/design-check.test.mjs",
     "packed": "node --test test/packed.mjs",
     "template": "node --test test/template.mjs",
     "template-e2e": "node test/template-e2e.mjs",
     "selfcontained": "node test/selfcontained.mjs",
     "claims": "node test/readme-claims.mjs",
     "mutate": "node test/mutate-pack.mjs && node test/mutate-template.mjs && node test/mutate-preflight.mjs",
-    "check": "node --check index.js && node --check lib/skill-provider.js && node --check skills/plugin-kit/scripts/preflight.mjs && node --check skills/plugin-kit/scripts/recheck.mjs && node --check scripts/reextract.mjs && npm test && npm run packed && npm run template && npm run template-e2e && npm run selfcontained && npm run claims && npm run mutate",
+    "check": "node --check index.js && node --check lib/skill-provider.js && node --check skills/plugin-kit/scripts/preflight.mjs && node --check skills/plugin-kit/scripts/recheck.mjs && node --check skills/plugin-kit/scripts/design-check.mjs && node --check scripts/reextract.mjs && npm test && npm run packed && npm run template && npm run template-e2e && npm run selfcontained && npm run claims && npm run mutate",
     "publish:check": "npm run check && npm pack --dry-run",
     "publish:npm": "npm run publish:check && npm publish --registry=https://registry.npmjs.org/ --access public",
     "release": "node scripts/release.mjs"

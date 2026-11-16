@@ -1,5 +1,6 @@
 // 变红证明：template.mjs 的守卫各自回退一次，确认每一处都能抓到自己那类错。
 // 2026-11-13 重写：骨架改为 4 文件（marker/stages 退役），变异集随新守卫更新。
+// 2026-11-17：骨架加 CONTEXT.md（设计期词汇表种子），追加两条设计期变异（共 7 条）。
 import { readFileSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -41,8 +42,8 @@ const muts = [
   {
     name: 'AGENTS.md 删掉 preflight 指路',
     file: TPL + '/AGENTS.md',
-    find: '1. `node <plugin-kit包>/skills/plugin-kit/scripts/preflight.mjs <项目根>` —— 0 FAIL 才算预检过',
-    replace: '1. 装前不用检查',
+    find: '2. `node <plugin-kit包>/skills/plugin-kit/scripts/preflight.mjs <项目根>` —— 0 FAIL 才算预检过',
+    replace: '2. 装前不用检查',
     expect: 'scripts/preflight.mjs',
   },
   {
@@ -51,6 +52,20 @@ const muts = [
     find: '## 不要做',
     replace: '## 不要做\n- 记得维护 .stage-gate.json marker',
     expect: '.stage-gate.json',
+  },
+  {
+    name: 'AGENTS.md 删掉 design-check 指路',
+    file: TPL + '/AGENTS.md',
+    find: '1. `node <plugin-kit包>/skills/plugin-kit/scripts/design-check.mjs <项目根>` —— 设计期工件 0 FAIL（首跑必红：种子是格式示例，按补法换成第一条真实术语）',
+    replace: '1. 设计期不用检查',
+    expect: 'design-check.mjs',
+  },
+  {
+    name: 'CONTEXT.md 种子换成真实术语（空真检测）',
+    file: TPL + '/CONTEXT.md',
+    find: '**示例术语**',
+    replace: '**真实术语**',
+    expect: '示例',
   },
 ];
 

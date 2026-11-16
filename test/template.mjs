@@ -30,6 +30,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..');
 const TPL = join(ROOT, 'skills/plugin-kit/template');
 const PREFLIGHT = join(ROOT, 'skills/plugin-kit/scripts/preflight.mjs');
+const DESIGN_CHECK = join(ROOT, 'skills/plugin-kit/scripts/design-check.mjs');
 
 /** 占位符。改这里等于改骨架的命名约定——三处必须跟着改。 */
 const PLACEHOLDER = 'my-plugin';
@@ -39,8 +40,8 @@ const read = (rel) => readFileSync(join(TPL, rel), 'utf8');
 
 // ---------------------------------------------------------------- 文件齐全
 
-test('骨架：4 个文件齐全（package.json / patch / index.js / AGENTS.md）', () => {
-  for (const rel of ['package.json', 'cordis.patch.yml', 'index.js', 'AGENTS.md']) {
+test('骨架：5 个文件齐全（package.json / patch / index.js / AGENTS.md / CONTEXT.md）', () => {
+  for (const rel of ['package.json', 'cordis.patch.yml', 'index.js', 'AGENTS.md', 'CONTEXT.md']) {
     assert.ok(existsSync(join(TPL, rel)), `骨架缺 ${rel}`);
   }
   // 退役文件不许回来
@@ -110,7 +111,7 @@ test('骨架：三处占位符一致（package.json / patch / index.js）', () =
 test('骨架：占位符唯一，不存在第二套名字', () => {
   // 初始化时靠「搜 my-plugin 是否零残留」判断改名做全了。
   // 如果骨架里还混着 demo / example / test-plugin，那条检查就失效了。
-  const files = ['package.json', 'cordis.patch.yml', 'index.js', 'AGENTS.md'];
+  const files = ['package.json', 'cordis.patch.yml', 'index.js', 'AGENTS.md', 'CONTEXT.md'];
   const others = ['@local/demo', '@local/example', 'test-plugin', 'my-decoration', "name = 'demo'"];
 
   for (const rel of files) {
@@ -187,6 +188,34 @@ test('骨架：AGENTS.md 指向 plugin-kit skill 与 preflight 自检脚本', ()
     agents.includes('scripts/preflight.mjs'),
     'AGENTS.md 必须给出 scripts/preflight.mjs 的具体指路——装前自检是骨架交付流程的一步',
   );
+
+  // 设计期指路（2026-11-17）：两个 skill 与 design-check 脚本都必须被点名。
+  for (const anchor of ['domain-modeling', 'codebase-design', 'design-check.mjs']) {
+    assert.ok(agents.includes(anchor), `AGENTS.md 缺设计期指路「${anchor}」`);
+  }
+});
+
+test('骨架：CONTEXT.md 是词汇表种子，且 design-check 首跑必红（不许恒绿空真）', () => {
+  const ctx = read('CONTEXT.md');
+  assert.ok(ctx.includes('**示例术语**'), 'CONTEXT.md 种子必须带「示例术语」占位标记');
+  assert.ok(ctx.includes('_Avoid_'), 'CONTEXT.md 种子必须示范 _Avoid_ 行');
+  assert.ok(/## Language/.test(ctx), 'CONTEXT.md 种子必须含 ## Language 节（CONTEXT-FORMAT）');
+
+  // 未改动的骨架跑 design-check 必须红——红的依据只能是「占位未替换」，
+  // 而不是「忘记跑」。若有人把种子换成真实术语，本测试变红，证明这条守卫在测东西。
+  let out = '';
+  let code = 0;
+  try {
+    out = execFileSync(process.execPath, [DESIGN_CHECK, TPL], {
+      cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 60_000,
+    });
+  } catch (e) {
+    code = e.status ?? 1;
+    out = String(e.stdout ?? '') + String(e.stderr ?? '');
+  }
+  assert.notEqual(code, 0, '未初始化骨架跑 design-check 应红（种子是格式示例）');
+  assert.ok(out.includes('lexicon.'), `design-check 应报 lexicon.*，实际：\n${out}`);
+  assert.ok(out.includes('示例'), `design-check 应报「示例」占位未替换，实际：\n${out}`);
 });
 
 test('骨架：AGENTS.md 不声称旧机制（拦截/台账/marker 已退役）', () => {
