@@ -404,6 +404,31 @@ claim('设计期:README ADR 计数', 'README 的 ADR 计数与实际 docs/adr �
   return `${n} 份 ADR`;
 });
 
+claim('发布:操作卡在位', 'docs/release-runbook.md 载明 registry 分层与「发布成功」判据', () => {
+  const p = join(ROOT, 'docs', 'release-runbook.md');
+  assert.ok(existsSync(p), '缺 docs/release-runbook.md（发布操作卡）');
+  const card = readFileSync(p, 'utf8');
+  for (const [re, label] of [
+    [/npmmirror/, 'registry 分层（镜像层）'],
+    [/registry\.npmjs\.org/, 'registry 分层（官方层）'],
+    [/PUT 202/, '「真没发出去」的判定依据'],
+    [/verify-publish\.mjs/, '发布后核实脚本'],
+    [/不要.*token/i, 'token 不外泄纪律'],
+  ]) {
+    assert.ok(re.test(card), `操作卡缺「${label}」`);
+  }
+  return '五锚点在位';
+});
+
+claim('发布:脚本接线', 'publish:npm 带发布后核实，且 verify-publish.mjs 在 node --check 门里', () => {
+  const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+  assert.ok(/verify-publish\.mjs/.test(pkg.scripts?.['publish:npm'] ?? ''), 'publish:npm 没接发布后核实');
+  assert.ok(/verify-publish\.mjs/.test(pkg.scripts?.['publish:verify'] ?? ''), '缺 publish:verify 脚本');
+  assert.ok(/verify-publish\.mjs/.test(pkg.scripts?.check ?? ''), 'verify-publish.mjs 不在 node --check 门里');
+  assert.equal(pkg.publishConfig?.registry, 'https://registry.npmjs.org/', 'publishConfig.registry 必须是官方源');
+  return '接线完整';
+});
+
 // ================================================================ 汇总
 
 const failed = results.filter((r) => !r.ok);

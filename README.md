@@ -261,7 +261,8 @@ rc.2 → rc.3 实测：文档副本 43 文件只有 1 行内容变化；触点 9
 | `evidence/redefinition/需求.md` | 重定义的 P0 验收表 A1–A10（已执行完毕的凭据） |
 | `evidence/redefinition/探针记录.md` + `probe-t*.mjs` | 三条探针：asar 结构、dsh-skill 契约、client.js ESM 判定式 |
 | `evidence/redefinition/运行时验收.md` | 一次性 profile 真机验收（A8） |
-| `evidence/doc-consolidation-2026-11-15.md` | 本次文档收敛的账本：主线、逐格处置表、防漂移守卫 |
+| `evidence/doc-consolidation-2026-11-15.md` | 文档收敛账本：主线、逐格处置表、防漂移守卫 |
+| [`docs/release-runbook.md`](docs/release-runbook.md) | **发布操作卡**：registry 分层、四条命令、「发布成功」判据与 404 排查、代理纪律 |
 | `evidence/2026-11-09-real-host.md` | 旧形态（阶段门）唯一真机存证——历史凭据，不代表现行产品 |
 
 **判据先例**：误导性历史该删（保留是制造误导），但承重历史和被推翻的结论要留着（抹平了，主线看着顺，那是把证据改成了结论）。
