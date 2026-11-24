@@ -217,7 +217,7 @@ const CHECKS = [
       return {
         status: 'UNVERIFIABLE',
         why: '插件间冲突只能真机验证：把包装进复刻目标环境完整 bundle 组合的一次性 profile，启动看是否 1 entry did not activate',
-        fix: '流程见 plugin-kit skill 的 P3.5 运行时验收（一次性 profile 四步：建→装→验→拆，不碰日常 profile）',
+        fix: '流程见 plugin-kit skill 的「首装验证」节末尾（一次性 profile 四步：建→装→验→拆，不碰日常 profile）',
       };
     },
   },

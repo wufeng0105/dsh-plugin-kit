@@ -4,12 +4,9 @@
  * 产品本体在 skills/plugin-kit/（判据正文 + preflight/recheck 脚本）。
  * 本文件只做一件事：把它们注册进宿主 skill 目录，免手动复制。
  *
- * 历史形态（拦截 / 台账 / 纪律段）已退役：
- *   - 拦截层废弃：docs/adr/0002-拦截层废弃.md
- *   - 作证台账搁置：docs/adr/0003-作证台账搁置.md
- *   - 旧实现完整代码在 git（a3f686d 的父提交及之前，即 61f5fa2 / c98c543），工作树不再保留。
+ * 本包不拦截调用、不记台账、不注入常驻提示——判据都在 skill 正文里，按需加载。
  *
- * 用到的接缝（rc.2 inspect 实测）：
+ * 用到的接缝（inspect 实测）：
  *   ctx.skills.registerProvider  —— 把 skills/ 注册进宿主 skill 目录
  *
  * @module @wufeng0105/dsh-plugin-kit

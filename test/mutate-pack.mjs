@@ -63,11 +63,13 @@ const results = [];
 
 // ---- 变异 3：SKILL.md 引用一个不存在的文件 → packed.mjs 必须红
 {
+  // 锚点用语义标题，不写编号：标题会随排版改，注入串跟着脱钩就退化成「注入失败」。
+  const ANCHOR = '## 首装验证';
   const f = `${ROOT}/skills/plugin-kit/SKILL.md`;
   const orig = readFileSync(f, 'utf8');
   const patched = orig.replace(
-    '## 二、首装验证',
-    '## 二、首装验证\n\n参见 `scripts/ghost-does-not-exist.mjs`。\n',
+    ANCHOR,
+    `${ANCHOR}\n\n参见 \`scripts/ghost-does-not-exist.mjs\`。\n`,
   );
   const changed = patched !== orig;
   writeFileSync(f, patched, 'utf8');

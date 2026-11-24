@@ -2,18 +2,24 @@
 
 > **一条流水线，四段**：设计期定概念与形状 → 写代码前查宿主契约 → 装之前首装自检 → 升级后触点复检。前两段住 skill 正文，后两段是脚本。
 
-装它，`plugin-kit` 这个 skill 自动出现在你的 skill 目录里。它**不拦任何调用、不记台账、不注入常驻提示**——旧形态（阶段门拦截 / 台账 / 纪律段）已于 2026-11-13 退役，决策记录见 [`docs/adr/`](docs/adr/)。
+装它，`plugin-kit` 这个 skill 自动出现在你的 skill 目录里。
 
-## 它解决什么
+## 这个包解决什么
 
 开发 DSH 插件，你在对着一个黑盒：
 
 | 痛点 | 表现 |
 |---|---|
-| **宿主是黑盒** | 契约（接缝、事件签名、Config 形状、加载方式）全在宿主运行时与约 208MB 的 app.asar 里（rc.2 时代实测 208,137,981 字节；rc.3 为 209,021,953，见 `skills/plugin-kit/host-skills/VERSION.json`），shell 工具打不开；离线合法的代码宿主里可能非法 |
+| **宿主是黑盒** | 契约（接缝、事件签名、Config 形状、加载方式）全在宿主运行时与 install 包内，shell 工具打不开；离线合法的代码宿主里可能非法 |
 | **「完成」没有权威定义** | 代码写完、测试全绿之后，没人告诉你什么算装上了、什么算能用了；DSH 升级后同一问题再来一遍 |
 
-这个包把流水线四段都变成可执行的程序：**设计期**跑 design-check 判工件，**写之前**按三步查契约，**装之前**跑 preflight，**升级之后**跑 recheck + 重解。
+这个包把流水线四段都变成可执行的程序：**设计期**跑 design-check 判工件，**写之前**查契约的三步，**装之前**跑 preflight，**升级之后**跑 recheck。
+
+## 不做什么
+
+- **不拦截任何调用。** 按工具身份猜调用行为这条路已被否证——fail-closed 会拦掉合法的只读调用，fail-open 四种常见形态全绕过。这是设计边界，不要重新提议。
+- **不记台账。** 本包不追踪谁改了什么，也不为写入分级作证。
+- **不注入常驻提示。** 判据都在 skill 正文里，按需加载；不往 systemPrompt 塞东西。
 
 ## 产品组成
 
@@ -25,14 +31,14 @@
 | **preflight.mjs** | `skills/plugin-kit/scripts/` | 首装自检：四大失败家族逐条核查，输出 PASS / FAIL / UNVERIFIABLE，FAIL 附「缺什么、怎么补」 |
 | **recheck.mjs** | `skills/plugin-kit/scripts/` | 升级复检：拿触点清单对照宿主快照，输出 OK / MISSING / CHANGED / UNVERIFIABLE 四态 |
 | **design-check.mjs** | `skills/plugin-kit/scripts/` | 设计期核查：词汇表格式、ADR 命名/正文、标识符样式的弃用名漂移；FAIL 附「缺什么、怎么补、依据」 |
-| **reextract.mjs** | `scripts/`（仅源码仓） | asar 解析与宿主文档重解：`--check` 过期判定 + 一键重解；不随 npm 包分发（它要读本机 app.asar 的绝对路径） |
-| **gen-host-snapshot.mjs** | `scripts/`（仅源码仓） | 从当前宿主 inspect 结果生成触点清单与宿主快照，让 recheck 有真实清单可跑 |
+| **reextract.mjs** | `scripts/`（仅源码仓） | asar 解析与宿主文档重解：`--check` 过期判定 + 一键重解；不随 npm 包分发 |
+| **gen-host-snapshot.mjs** | `scripts/`（仅源码仓） | 从当前宿主 inspect 结果生成触点清单与宿主快照 |
 | **Host 半** | `index.js` + `lib/skill-provider.js` | 只做一件事：把 `skills/` 注册进宿主 skill 目录。无用户配置、无事件监听、无工具注册 |
 
-Host 半的三个承重细节（每条都有真机事故出处，见 [CHANGELOG.md](CHANGELOG.md) 0.1.x 节）：
+Host 半的三个承重细节，每条都来自真机事故：
 
 - skill 候选过**双重防线**——IO 失败跳过 + 字段违规跳过。一个坏候选会穿透注册表把整个 provider 拖垮，所以宁可静默跳过也不让它进门（`lib/skill-provider.js` 的 K1/K3/K5 注释）。
-- `readSkill` 必须返回**完整 SkillDefinition** 并带 `resourceBase`——缺它时 skill 在目录里可见但一加载就报错（「目录可见 ≠ 能加载」），且模型拿到正文不知道 `references/` 在哪（一次真实开发为此花了 200+ 次工具调用找契约）。
+- `readSkill` 必须返回**完整 SkillDefinition** 并带 `resourceBase`——缺它时 skill 在目录里可见但一加载就报错（「目录可见 ≠ 能加载」），且模型拿到正文不知道 `references/` 在哪。
 - `registerProvider` 的 disposer 由宿主拥有，必须包在 `ctx.effect()` 里才能在卸载时回收。
 
 ### 源码布局
@@ -46,12 +52,12 @@ dsh-plugin-kit/
 │   ├── scripts/             preflight.mjs / recheck.mjs / design-check.mjs（随包分发）
 │   ├── template/            新插件项目骨架（5 文件：含词汇表种子 CONTEXT.md）
 │   ├── assets/              触点清单 / 宿主快照样例
-│   └── host-skills/         dsh-doc 副本（43 文件）+ VERSION.json
+│   └── host-skills/         dsh-doc 副本 + VERSION.json
 ├── scripts/                 reextract.mjs / gen-host-snapshot.mjs / release.mjs（仅源码仓）
-├── docs/adr/                四个决策记录
-├── evidence/                凭据：裁定书、真机存证、验收记录、探针脚本、文档收敛账本
+├── evidence/                凭据：真机存证、审计、探针脚本
 ├── test/                    全部验证入口见 npm run check
-└── CHANGELOG.md             版本历史（0.2.0 重定义 + 0.1.x 事故出处表）
+├── CONTRIBUTING.md          维护者入口：发布流程、开发纪律、禁用语
+└── CHANGELOG.md             版本历史
 ```
 
 ## 安装
@@ -88,15 +94,15 @@ node skills/plugin-kit/scripts/design-check.mjs <你的插件项目根>
 
 ## 查契约的三步（摘要在 skill 正文）
 
-1. **`cordis_inspect_query`** —— 权威源。Service 方法、事件名/mode/签名、Config schema。事件全集（如 rc.2 的 `fs/write-intent`）只在 inspect 里，任何文档都没有逐条清单。
+1. **`cordis_inspect_query`** —— 权威源。Service 方法、事件名/mode/签名、Config schema。事件全集只在 inspect 里，任何文档都没有逐条清单。
 2. **`dsh-doc` 文档** —— 机制原则与装配形态。可检索副本随包分发在 `skills/plugin-kit/host-skills/dsh-doc/`（43 文件，可 grep / glob）。
 3. **找一个真实运行的同类型插件读源码** —— 最有效、最容易被忘的一招。
 
-每步的「什么时候用 + 判据」、查完必须产出什么（方法签名 / 事件 mode / Slot props / Config 字段），全部写在 [`skills/plugin-kit/SKILL.md`](skills/plugin-kit/SKILL.md)——那是模型装包后实际读到的正文，此处只留摘要不展开。
+每步的「什么时候用 + 判据」、查完必须产出什么（方法签名 / 事件 mode / Slot props / Config 字段），全部写在 [`SKILL.md`](skills/plugin-kit/SKILL.md)——那是模型装包后实际读到的正文，此处只留摘要不展开。
 
 ## 首装验证：preflight
 
-代码写完、测试全绿 ≠ 装上能用。四类致命失败**全都不在任何一段代码里**，逐段检查看不见——完整判定式与事故出处见 [`SKILL.md` §二](skills/plugin-kit/SKILL.md)，此处不复述。
+代码写完、测试全绿 ≠ 装上能用。四类致命失败**全都不在任何一段代码里**，逐段检查看不见——完整判定式见 [`SKILL.md`](skills/plugin-kit/SKILL.md) 的「首装验证」节，此处不复述。
 
 ```bash
 # 装之前、每次交付前
@@ -130,76 +136,28 @@ node skills/plugin-kit/scripts/recheck.mjs \
   --snapshot  skills/plugin-kit/assets/host-snapshot.json --strict
 ```
 
-rc.2 → rc.3 实测：文档副本 43 文件只有 1 行内容变化；触点 9 条中 8 OK / 0 MISSING / 0 CHANGED / 1 UNVERIFIABLE（`settings.section` Slot 需页面在线人工核对）。两个脚本都自带 `--self-test`，先跑它证明判定式会红。
+两个脚本都自带 `--self-test`，先跑它证明判定式会红。
 
-## 开发纪律
+## 已知限制（诚实列）
 
-> **审查员的价值不在「多一双眼睛」，而在「它没参与写，所以没有立场替写的人找理由」。** 审查员曾是本插件的产品能力，2026-11-13 降级为本仓开发纪律（ADR 0001）——它在两轮审查中各抓出两条 MAJOR，实证有效。协议原文在 git（原 `docs/reviewer.md`，2026-11-15 并入本节）。
+| 限制 | 影响 |
+|---|---|
+| preflight 是静态检查 | 它判不了运行时行为——装完后的实际可见性仍需一次性 profile 真机验证 |
+| 「环境相关」家族 UNVERIFIABLE | 插件间冲突只能真机验（复刻完整 bundle 组合的一次性 profile） |
+| 文档副本会过期 | 宿主升级后在**源码仓**跑 `node scripts/reextract.mjs --check`（该脚本不随 npm 包分发）；不做激活时自动同步（拿稳定性换新鲜度不划算） |
+| inspect 不可达时判不了 | 没有宿主运行时，契约只能读到 L3（源码核对），不冒充已验证 |
+| design-check 只判工件格式与特征词漂移 | 接口深度、接缝位置、依赖注入是人工判读（UNVERIFIABLE 给判法）；入口导出面归 preflight 判 |
+| 证据边界 | 「四大失败家族」是单作者事故史归纳，「换人也遇到」未验证 |
 
-**六条纪律的正典在 [`SKILL.md` §四](skills/plugin-kit/SKILL.md)**（每装一个包就会读到），本文不复述。
+## 生命周期
 
-本仓额外收着的三样（只在派独立审查员时用）：
-
-证据等级（每条结论都要标；L3 不能冒充 L1/L2）：
-
-| 等级 | 形态 | 能证明什么 |
-|---|---|---|
-| **L1 运行时** | 真机安装后实际点击、观察 | 功能真的可用 |
-| **L2 行为复现** | 用真实依赖跑出行为 | 代码路径真的通 |
-| **L3 源码核对** | 读安装包源码、引用行号 | 契约形态对不对 |
-| **L4 自述** | 写的人自己说的 | **什么都不能证明**，只能当线索 |
-
-派独立审查员时的三条硬要求（缺任一条 = 未完成审查）：
-
-- **H1** 不许只照抄实现者给的判定式——至少一条要自己从需求原文推导，并写清推导链（9 份报告照抄 A1–A14，bug 全在显示层却全落在数据层）。
-- **H2** 至少一条真宿主观察：装进真环境看一眼，不接受全程 `%TEMP%` 沙箱跑脚本。
-- **H3** 报告必须有「用户可见面」小节：第一眼看到什么 / 对应哪条判据 / 哪部分没看到。缺这一节，读的人一眼就知道审查员没看屏幕。
-
-九个动作：独立复跑、空真排除、接线可达性、验收分类复核、计数机检、防漂移测试核查、打包真加载、缺陷清单时效、行为复现优先。审查员的五种失效方式（规格含糊时自创标准、同用坏仪器、只查缺陷清零、够不着运行时冒充、只读代码不跑行为）都是实际发生过的——完整论述在 git 历史。
-
-任务书模板（复制给新开的审查员，替换尖括号内容）：
-
-```text
-你是审查员。只读产物，不写代码，不改任何文件。
-
-## 判据来源（只从这三处）
-1. 需求验收表：<验收文件路径>
-2. 客户需求：<需求文件路径>
-3. 宿主真实契约：cordis_inspect_query 或安装包源码
-
-## 三条硬要求（缺任一条 = 未完成审查）
-1. 不许只照抄实现者给的判定式。至少一条判据要你自己从需求原文推导，并写清推导链。
-2. 至少一条真宿主观察：装进真环境看一眼，不接受全程 %TEMP% 沙箱跑脚本。
-3. 报告必须有「用户可见面」小节（第一眼看到什么 / 对应哪条判据 / 哪部分没看到）。
-
-## 你要做的
-1. 独立复跑所有命令（不引用写的人贴的输出）
-2. 逐条按需求字面判三态：已验 / 无法判定 / 不符
-3. 每条缺陷带证据（文件:行 或 命令输出），按 BLOCKER/MAJOR/MINOR 分级
-4. 标注每条结论的证据等级：L1 运行时 / L2 行为复现 / L3 源码 / L4 自述
-5. 给放行意见：PASS / PASS-WITH-CONDITIONS / FAIL / UNDECIDABLE
-
-## 你要特别查的
-- **用户可见面**：操作之后，宿主界面上用户第一眼看到什么？需求里那条判据在哪？
-- 接线可达性：模块有没有真的被产品代码 import
-- 空真：通过的检查有没有数据支撑
-- 验收分类：有没有把实质缺陷归入"需运行时验"
-- 防漂移测试：常量是不是测试自己提供的
-- 计数：验收条数、缺陷条数、分类总和对不对得上
-
-## 你不做什么
-- 不写代码、不替写的人补产物
-- 不把写的人的自述当结论
-- 不把"无法判定"改写成"通过"
-```
-
-纪律有效的最近一次实证：「补路标」提案 4 条建议经独立审计后 3 条被推翻撤销，只落盘 1 条可证的代码修复——审计的作用不是盖章，是把 3/4 的方案打掉（全文见 [`evidence/audits/2026-11-13-field-review-proposal.md`](evidence/audits/2026-11-13-field-review-proposal.md)，被推翻的原提案与审计结论都保留原样）。
+- **升级**：`plugin_manager install_bundle target=<新包路径>`，启动日志版本号会变。
+- **卸载**：`dsh plugin --profile <profile> remove @wufeng0105/dsh-plugin-kit`——不删你项目的任何文件。
+- **从更早的旧包名 `@wufeng0105/dsh-stage-gate` 迁移**：必须先卸旧再装新（旧包若仍在 profile 中，两套 bundle 行并存会双重注册）。
 
 ## 词汇表
 
-一个东西一个名字；退役词只作历史语义，勿当现行词用。
-
-### 现行词
+一个东西一个名字。
 
 **契约知识**：关于「宿主要什么」的事实：接缝名、事件签名、Config 形状、加载方式。来源是宿主运行时（inspect）与安装包源码，不是任何人的记忆。_Avoid_: 领域知识、宿主文档、API 文档
 
@@ -228,92 +186,6 @@ rc.2 → rc.3 实测：文档副本 43 文件只有 1 行内容变化；触点 9
 **升级复检**：recheck 管的那一段职责名（升级后判触点是否还成立）。
 
 **recheck**：升级复检脚本（`skills/plugin-kit/scripts/recheck.mjs`）。_Avoid_: 复检（不带名）
-
-### 退役词（历史语义，勿在新文档使用）
-
-**阶段门**：已退役（2026-11-13，ADR 0001/0002）。旧机制：未过门的阶段产物写入被拦截或记账。拦截证伪（17 拦 0 真阳性——注意裁定书自身告诫：门实际只运行 134/763 分钟，「17 次」含争议，方向性结论不变）、台账未验证假设已搁置。历史实现见 git（`61f5fa2` / `c98c543` 等父提交树——`77ef98f` 及之前的所有提交均含完整旧实现）。_Avoid_: 用它指代本插件的任何现行能力
-
-**纪律段**：已退役（ADR 0001）。旧机制：向 systemPrompt 常驻注入提示。判据内容现住 skill 正文，不需要常驻提醒。_Avoid_: systemPrompt 段
-
-**marker（.stage-gate.json）**：已退役（ADR 0002）。旧机制：项目级「启用阶段门」声明文件。现行的项目声明是触点清单 `touchpoints.json`。_Avoid_: 启用开关
-
-**九阶段 / P0–P5 卡**：已降级（ADR 0001）。旧产品把单作者事故史长出的流程当机制分发。其中仍成立的通用纪律（每条验收能判真假、变红证明、一次性 profile 等）已收编进 skill 正文「开发纪律」节；完整旧文见 `evidence/process-lab-legacy/`（源码仓，不进 npm 包）。
-
-**作证台账（witness）**：搁置非废弃（ADR 0003）。曾设想挂在 fs/write-intent 上按作者分级记录写入事实。复活条件：多智能体协作使「谁干的」成为日常痛点；届时接缝迁移（tools/pre-execute → fs/*-intent）一并重启。
-
-## 历史与凭据
-
-历史材料默认不进阅读路径；要复核结论怎么来的，再进。
-
-**四个决策（[`docs/adr/`](docs/adr/)，各一句话）：**
-
-- **0001 核心目标重定义**：凡被证实的能力都是「证据或证据的纪律」，凡被证伪的都是「替代信任」——产品从流程门收敛为黑盒翻译器。
-- **0002 拦截层废弃**：fail-closed（17 拦 0 真阳性）与 fail-open（shell 4 形态全绕过）双输；rc.2 的 `fs/*-intent` 接缝只解决「怎么拦得准」，解决不了「该不该拦」。
-- **0003 作证台账搁置**：好想法、错的证据基础（痛点论证完全依赖单作者实验记录）；搁置非废弃，复活条件三条全列在 ADR 里。
-- **0004 设计期核查**：把 domain-modeling 与 codebase-design 的工件做成机判（词汇表/ADR 格式 + 特征词漂移）；入口导出面归 preflight，两脚本不互判。
-
-**凭据目录（[`evidence/README.md`](evidence/README.md) 是入口）：**
-
-| 文件 | 是什么 |
-|---|---|
-| `evidence/audits/2026-11-11-拦截层存废裁定.md` | 「17 拦 0 真阳性」等数字的唯一原始依据（含自身告诫与复核方法） |
-| `evidence/audits/2026-11-13-field-review-proposal.md` | 提案→审计→落盘全程（C1/C2/C3 被推翻的原样保留） |
-| `evidence/redefinition/需求.md` | 重定义的 P0 验收表 A1–A10（已执行完毕的凭据） |
-| `evidence/redefinition/探针记录.md` + `probe-t*.mjs` | 三条探针：asar 结构、dsh-skill 契约、client.js ESM 判定式 |
-| `evidence/redefinition/运行时验收.md` | 一次性 profile 真机验收（A8） |
-| `evidence/doc-consolidation-2026-11-15.md` | 文档收敛账本：主线、逐格处置表、防漂移守卫 |
-| [`docs/release-runbook.md`](docs/release-runbook.md) | **发布操作卡**：registry 分层、四条命令、「发布成功」判据与 404 排查、代理纪律 |
-| `evidence/2026-11-09-real-host.md` | 旧形态（阶段门）唯一真机存证——历史凭据，不代表现行产品 |
-
-**判据先例**：误导性历史该删（保留是制造误导），但承重历史和被推翻的结论要留着（抹平了，主线看着顺，那是把证据改成了结论）。
-
-## 发布与版本管理
-
-**版本号只有一个来源**：`package.json` 的 `version`。git tag 名与 npm 版本都从它派生。
-
-```bash
-node scripts/release.mjs --check          # 只核对现状（七项），不改任何东西
-node scripts/release.mjs patch|minor|major # 升版 + 提交 + 打 tag（跑全量验证门后才动）
-git push origin main --follow-tags
-npm run publish:npm                        # 内部先跑 check + pack 干跑 + publish + 核实
-```
-
-`release.mjs` 的七项核对：版本是纯 `x.y.z`、CHANGELOG 有对应节、tag 不存在、工作树干净、分支是 main 且已同步、npm 上该版本不存在、`repository` 指回本仓。任何一项不过就拒绝继续。
-
-**脚本不代做 push 与 publish**——两个不可撤销的外部动作，执行权留给人。
-
-### npm registry 与「发布成功」的判据
-
-本仓带一个项目级 `.npmrc`，把 **本目录内**的 npm 命令固定到官方源 `registry.npmjs.org`；全局 registry 仍是国内镜像，日常安装速度不受影响。`package.json` 的 `publishConfig` 是双保险（换目录发布也不会发错源）。
-
-**「发布成功」的唯一判据是官方源版本端点能查到**，不是 `npm publish` 的退出码——它会打印 `+ 包@版本` 并 exit 0，而 CDN 传播要几分钟，期间查询全是 404：
-
-```bash
-npm run publish:verify      # 官方源核实（--wait 最多等 8 分钟）
-node scripts/verify-publish.mjs 0.3.0   # 核指定版本
-```
-
-判 404 时按概率排查三条：① 刚发布，CDN 在传播（等，或 `--wait`）；② 真没发出去——查 publish 日志有没有 `http fetch PUT 202`，只有 GET 没有 PUT 才是真没发；③ 查的不是官方源。
-
-> 首次发布时 packument（包根索引）会比版本端点晚几分钟生效，期间 `npm install` 报 404 而 tarball 直链已可下载——这是 CDN 传播，不是发布失败。
-
-## 已知限制（诚实列）
-
-| 限制 | 影响 |
-|---|---|
-| preflight 是静态检查 | 它判不了运行时行为——装完后的实际可见性仍需一次性 profile 真机验证 |
-| 「环境相关」家族 UNVERIFIABLE | 插件间冲突只能真机验（复刻完整 bundle 组合的一次性 profile） |
-| 文档副本会过期 | 宿主升级后在**源码仓**跑 `node scripts/reextract.mjs --check`（该脚本不随 npm 包分发）；不做激活时自动同步（拿稳定性换新鲜度不划算） |
-| inspect 不可达时判不了 | 没有宿主运行时，契约只能读到 L3（源码核对），不冒充已验证 |
-| design-check 只判工件格式与特征词漂移 | 接口深度、接缝位置、依赖注入是人工判读（UNVERIFIABLE 给判法）；入口导出面归 preflight 判 |
-| 证据边界 | 「四大失败家族」是单作者事故史归纳，「换人也遇到」未验证；`fs/*-intent` 的 actor 字段能否解出 session 身份是 L3 推断（承 ADR 0003） |
-
-## 生命周期
-
-- **升级**：`plugin_manager install_bundle target=<新包路径>`，启动日志版本号会变。
-- **卸载**：`dsh plugin --profile <profile> remove @wufeng0105/dsh-plugin-kit`——不删你项目的任何文件。
-- **从 0.1.x（旧阶段门形态）升级**：直接换包即可；你项目里的 `.stage-gate.json` / `stages/` / `stages/_ledger.jsonl` 不会被删除也不会再被读写——要不要清掉由你决定（它们属于已退役的机制）。
-- **从更早的旧包名 `@wufeng0105/dsh-stage-gate` 升级**：必须先卸旧再装新（旧包若仍在 profile 中，两套 bundle 行并存会双重注册）。
 
 ## 许可证
 

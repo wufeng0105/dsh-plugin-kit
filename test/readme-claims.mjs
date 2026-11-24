@@ -69,6 +69,51 @@ function makeCtx() {
 
 console.log('README 断言核对\n');
 
+// ---- 骨架技术契约（2026-11-24：模板的 engines 曾比本包自己的下界还旧）
+claim('模板:engines 不低于本包', 'template/package.json 的 dsh 下界不得低于根 package.json', () => {
+  const root = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+  const tpl = JSON.parse(readFileSync(join(SKILL_DIR, 'template', 'package.json'), 'utf8'));
+  const verOf = (range) => {
+    const m = /^>=(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)/.exec(String(range ?? ''));
+    return m === null ? null : m[1];
+  };
+  const rootVer = verOf(root.engines?.dsh);
+  const tplVer = verOf(tpl.engines?.dsh);
+  assert.ok(rootVer !== null, `根 engines.dsh 无法解析：${root.engines?.dsh}`);
+  assert.ok(tplVer !== null, `模板 engines.dsh 无法解析：${tpl.engines?.dsh}`);
+  // 骨架是本包分发的产物，不该承诺本包自己都不支持的宿主版本。
+  const cmp = (a, b) => {
+    const pa = a.split(/[.-]/).map((x) => (/^\d+$/.test(x) ? Number(x) : x));
+    const pb = b.split(/[.-]/).map((x) => (/^\d+$/.test(x) ? Number(x) : x));
+    for (let i = 0; i < Math.max(pa.length, pb.length); i += 1) {
+      const x = pa[i] ?? 0;
+      const y = pb[i] ?? 0;
+      if (x === y) continue;
+      if (typeof x === 'number' && typeof y === 'number') return x < y ? -1 : 1;
+      return String(x) < String(y) ? -1 : 1;
+    }
+    return 0;
+  };
+  assert.ok(cmp(tplVer, rootVer) >= 0, `模板要求 dsh >=${tplVer}，低于本包的 >=${rootVer}`);
+  return `模板 >=${tplVer} ≥ 本包 >=${rootVer}`;
+});
+
+// ---- 脚本指路可解析（2026-11-24：preflight 曾把用户指向已退役的 P3.5 章节）
+claim('保鲜:脚本指路可解析', '随包脚本里「见 plugin-kit skill 的 X」必须能在 SKILL.md 找到同名节', () => {
+  const skill = readFileSync(join(SKILL_DIR, 'SKILL.md'), 'utf8');
+  const scriptsDir = join(SKILL_DIR, 'scripts');
+  const bad = [];
+  for (const f of readdirSync(scriptsDir).filter((n) => n.endsWith('.mjs'))) {
+    const src = readFileSync(join(scriptsDir, f), 'utf8');
+    for (const m of src.matchAll(/plugin-kit skill 的[「']?([\u4e00-\u9fa5A-Za-z0-9._]+)/g)) {
+      const section = m[1];
+      if (!skill.includes(section)) bad.push(`${f} → 「${section}」`);
+    }
+  }
+  assert.ok(bad.length === 0, '脚本把用户指向 SKILL.md 里不存在的章节：' + JSON.stringify(bad));
+  return '全部可解析';
+});
+
 // ---- 导出面
 claim('导出面', 'index.js 导出 name=plugin-kit / inject=[skills] / apply', () => {
   assert.equal(name, 'plugin-kit');
@@ -204,14 +249,7 @@ claim('副本:inspect 权威源条款', 'practices.md 载明「confirm every Ser
   return '成立';
 });
 
-// ---- ADR 与退役
-claim('ADR:三份在位', 'docs/adr/ 有 0001-0003 三份决策记录', () => {
-  for (const f of ['0001-核心目标重定义.md', '0002-拦截层废弃.md', '0003-作证台账搁置.md']) {
-    assert.ok(existsSync(join(ROOT, 'docs', 'adr', f)), `缺 ${f}`);
-  }
-  return '成立';
-});
-
+// ---- 交付面与退役
 claim('退役:代码清零', '产品代码无拦截/台账/纪律段残留（A9 六模式）', () => {
   const src = ['index.js', 'lib/skill-provider.js'].map((f) => readFileSync(join(ROOT, f), 'utf8')).join('\n');
   for (const pattern of ['tools/pre-execute', 'tools/result', 'enforce', 'createLedger', 'systemPrompt.section', 'GATE_MISSING']) {
@@ -309,59 +347,77 @@ claim('E2E4', 'README 写明重解与 preflight 怎么跑', () => {
 // 这组断言看守「唯一现状文档」的完整性——四家族 / 退役词 / 证据等级 / 链接。
 // CONTEXT.md 与 reviewer.md 已删，README 是它们内容的唯一现行住址，漂移即失守。
 
-claim('收敛:四家族', '四大失败家族的正典在 SKILL.md，README 只指路不复述', () => {
+claim('面:四家族正典', '四大失败家族的正典在 SKILL.md，README 按名指路不复述', () => {
   const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
   const skill = readFileSync(join(SKILL_DIR, 'SKILL.md'), 'utf8');
   for (const family of ['装不上', '装上了但看不见', '一加载就崩', '环境相关']) {
     assert.ok(skill.includes(family), `SKILL.md 缺失败家族「${family}」`);
   }
-  // README 必须指到 SKILL.md 的失败家族节，且不得再整表复述（一体成文：一处说清）。
-  assert.ok(/SKILL\.md.*§二|§二.*SKILL\.md/.test(readme), 'README 必须指路 SKILL.md §二（失败家族正典）');
-  return '正典在 SKILL.md，README 指路';
+  // README 指到 SKILL.md 的「首装验证」节即可；不得整表复述（一体成文：一处说清）。
+  // 锚用节名而不是 §编号：编号会随排版变，节名是语义。
+  assert.ok(/首装验证/.test(readme), 'README 必须按名指路 SKILL.md 的「首装验证」节');
+  return '正典在 SKILL.md，README 按名指路';
 });
 
-claim('收敛:退役词在场', 'README 词汇表保留全部退役词标记（语义防漂移锚点）', () => {
-  const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
-  for (const [re, label] of [
-    [/阶段门/, '阶段门'],
-    [/纪律段/, '纪律段'],
-    [/\.stage-gate\.json/, 'marker'],
-    [/九阶段/, '九阶段'],
-    [/作证台账/, '作证台账'],
-  ]) {
-    assert.ok(re.test(readme), `README 词汇表缺退役词「${label}」——退役词清单原样保留是 CONTEXT.md 并入的承重部分`);
-  }
-  return '五个退役词在位';
-});
-
-claim('收敛:证据等级', 'README 开发纪律节载明 L1–L4 证据等级（reviewer.md 并入的承重部分）', () => {
-  const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
+claim('面:证据等级双落点', 'L1–L4 定义在 SKILL.md（随包，模型要读），CONTRIBUTING 留可读副本', () => {
+  const skill = readFileSync(join(SKILL_DIR, 'SKILL.md'), 'utf8');
+  const contributing = readFileSync(join(ROOT, 'CONTRIBUTING.md'), 'utf8');
+  // SKILL.md 是唯一随包分发的、使用这些等级的文件——定义必须在这里，
+  // 否则模型读到「标 L3」却不知道 L3 是什么（包内无定义 = 死引用）。
   for (const level of ['L1 运行时', 'L2 行为复现', 'L3 源码', 'L4 自述']) {
-    assert.ok(readme.includes(level), `README 缺证据等级「${level}」`);
+    assert.ok(skill.includes(level), `SKILL.md 缺证据等级定义「${level}」`);
   }
-  assert.ok(/L3 不能冒充/.test(readme), 'README 缺「L3 不能冒充」硬要求');
-  return '四级齐 + 硬要求在位';
+  assert.ok(/什么都不能证明/.test(skill), 'SKILL.md 缺「L4 自述什么都不能证明」这条硬约束');
+  assert.ok(/L3 不能冒充/.test(skill), 'SKILL.md 缺「L3 不能冒充」硬要求');
+  // 维护者侧保留，便于派审查员时直接照抄
+  for (const level of ['L1 运行时', 'L2 行为复现', 'L3 源码', 'L4 自述']) {
+    assert.ok(contributing.includes(level), `CONTRIBUTING 缺证据等级「${level}」`);
+  }
+  return '定义在 SKILL.md，副本在 CONTRIBUTING';
 });
 
-claim('收敛:纪律单源', '六条纪律只在 SKILL.md 正典，README 指路不复述', () => {
+claim('面:纪律单源', '六条纪律锚点在 SKILL.md，README 按名指路不复述', () => {
   const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
   const skill = readFileSync(join(SKILL_DIR, 'SKILL.md'), 'utf8');
   const anchors = ['能判真假', '必须带出处', '证明它会红', '产品在用', '无法判定', '必须真跑过'];
   for (const a of anchors) {
     assert.ok(skill.includes(a), `SKILL.md 缺纪律锚点「${a}」`);
   }
-  // README 指路即可；若六条又整段贴回 README，就是重新变成双源（一体成文：一处说清）。
-  assert.ok(/SKILL\.md.*§四|§四.*SKILL\.md/.test(readme), 'README 必须指路 SKILL.md §四（六条纪律正典）');
+  // README 正文不展开六条；只要它在讲失败家族时指向 SKILL.md 即可。
+  // 锚用文件名而不是 §编号。
+  assert.ok(/SKILL\.md/.test(readme), 'README 必须指路 SKILL.md');
   return '正典在 SKILL.md，README 指路';
 });
 
-claim('收敛:链接存在', 'README 的每个仓库内相对链接都真实存在（收敛后按名回指不出死链）', () => {
+claim('面:链接存在', 'README 的每个仓库内相对链接都真实存在（不出死链）', () => {
   const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
   const links = [...readme.matchAll(/\]\(([^)#][^)]*)\)/g)].map((m) => m[1]).filter((h) => !/^[a-z][a-z0-9+.-]*:/i.test(h));
   assert.ok(links.length > 0, 'README 一个仓库内链接都没有——锚点失效');
   const missing = links.filter((rel) => !existsSync(join(ROOT, rel)));
   assert.ok(missing.length === 0, 'README 引用了不存在的路径：' + JSON.stringify(missing));
   return `${links.length} 个链接全部存在`;
+});
+
+// ---- 交付面：README 只承诺，判据在 SKILL.md
+claim('面:README 定位', 'README 含「不做什么」硬边界（拦截/台账/常驻提示三条）', () => {
+  const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
+  for (const [re, label] of [
+    [/不拦截任何调用/, '不拦截'],
+    [/不记台账/, '不记台账'],
+    [/不注入常驻提示/, '不注入常驻提示'],
+  ]) {
+    assert.ok(re.test(readme), `README 缺硬边界「${label}」——这是唯一有约束力的历史改写成的现行约束`);
+  }
+  return '三条边界在位';
+});
+
+claim('面:无跨面链接', 'README 不得链接到面 C 文件（那些文件不进 npm 包）', () => {
+  const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
+  const links = [...readme.matchAll(/\]\(([^)#][^)]*)\)/g)].map((m) => m[1]).filter((h) => !/^[a-z][a-z0-9+.-]*:/i.test(h));
+  // 面 C：不进 npm 包的文件。README 在包内，指向它们等于让读者拿到空引用。
+  const offSurface = links.filter((rel) => /^(docs\/|evidence\/|test\/)/.test(rel) || rel === 'CONTRIBUTING.md');
+  assert.ok(offSurface.length === 0, `README 链接了不进包的文件：${JSON.stringify(offSurface)}`);
+  return `${links.length} 个链接全在包内`;
 });
 
 // ---- 设计期落点（2026-11-17：两个 skill 的工件成为可机判落点）
@@ -397,28 +453,21 @@ claim('设计期:README 骨架计数', 'README 宣称的骨架文件数与 templ
   return `宣称 ${claimed} = 实际 ${actual}`;
 });
 
-claim('设计期:README ADR 计数', 'README 的 ADR 计数与实际 docs/adr 一致（四个决策）', () => {
-  const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
-  const n = readdirSync(join(ROOT, 'docs', 'adr')).filter((f) => f.endsWith('.md')).length;
-  assert.ok(readme.includes('四个决策') && n === 4, `README 宣称四个决策，实际 ${n} 份 ADR`);
-  return `${n} 份 ADR`;
-});
-
-claim('发布:操作卡在位', 'docs/release-runbook.md 载明 registry 分层与「发布成功」判据', () => {
-  const p = join(ROOT, 'docs', 'release-runbook.md');
-  assert.ok(existsSync(p), '缺 docs/release-runbook.md（发布操作卡）');
+claim('发布:操作卡在位', 'CONTRIBUTING.md 载明 registry 分层与「发布成功」判据', () => {
+  const p = join(ROOT, 'CONTRIBUTING.md');
+  assert.ok(existsSync(p), '缺 CONTRIBUTING.md（维护者入口）');
   const card = readFileSync(p, 'utf8');
   for (const [re, label] of [
-    [/npmmirror/, 'registry 分层（镜像层）'],
     [/registry\.npmjs\.org/, 'registry 分层（官方层）'],
     [/PUT 202/, '「真没发出去」的判定依据'],
     [/verify-publish\.mjs/, '发布后核实脚本'],
     [/不要.*token/i, 'token 不外泄纪律'],
   ]) {
-    assert.ok(re.test(card), `操作卡缺「${label}」`);
+    assert.ok(re.test(card), `维护者指南缺「${label}」`);
   }
-  return '五锚点在位';
+  return '四锚点在位';
 });
+
 
 claim('发布:脚本接线', 'publish:npm 带发布后核实，且 verify-publish.mjs 在 node --check 门里', () => {
   const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));

@@ -5,13 +5,19 @@ description: Use when designing, developing, installing, or upgrading a DSH plug
 
 # DSH 插件：从设计到保鲜
 
-> 你在对着一个黑盒开发：**写之前不知道宿主要什么（契约），写完不知道它认不认（验证）。**
-> 这条流水线四段：设计期定概念与形状 → 写代码前查契约 → 装之前首装自检 → 升级后触点复检。
-> 它不拦你、不替你判断质量——它让你在宣称「完成」之前，每一条都有据可查。
+## 从这里开始
 
-## 给谁用
+先判断你现在在四段中的哪一段，跳到对应节，别从头读到尾：
 
-**给已经会写 DSH 插件的人。** 还没装成功过一个最小插件的话，先去做那件事——装不上的时候，这里的每一条你都看不懂。
+| 你正在做的事 | 去哪一节 |
+|---|---|
+| 还没想清楚做什么、怎么分块 | 设计期：定概念与形状 |
+| 要动笔写代码，但不知道宿主要什么 | 查契约的三步 |
+| 代码写完了，要判断能不能装 | 首装验证 |
+| DSH 升级了，不知道还兼不兼容 | 升级保鲜 |
+| 要新建一个插件项目 | 新建插件项目 |
+
+贯穿四段的是**开发纪律**六条，任何一段都成立。
 
 ## 设计期：定概念与形状（写代码之前）
 
@@ -34,24 +40,24 @@ node <本skill目录>/scripts/design-check.mjs <你的插件项目根>
 
 **三个脚本的分工（不互判）**：设计期跑 design-check（定概念与形状）；装前跑 preflight（判宿主契约与装败）；升级后跑 recheck（判触点漂移）。
 
-## 一、查契约的三步顺序（痛点：宿主是黑盒）
+## 查契约的三步
 
-宿主契约的真实来源只有一个：**正在运行的安装本身**。按成本从低到高三步，前一步答不了才走下一步：
+宿主契约的真实来源只有一个：**正在运行的安装本身**。按成本从低到高三步，前一步答不了才走下一步。
 
-### 第 1 步：`cordis_inspect_query`（权威源， always 先走）
+### 第 1 步：`cordis_inspect_query`（权威源，先走这一步）
 
 - Service 方法与签名 → host `Service.listService` / `listService({service})`
 - 事件名 / mode / 签名 → host `Event.listEvents` / `listEvents({event})`
 - 插件 Config schema → host `Config.listConfigs`（`name` 过滤，`entry` 取单条）
 - 工具 / Slot / 主题 → 对应 provider
 
-**为什么它是权威源**：事件全集不在任何文档里（实测：rc.2 的 `fs/write-intent` 三个新接缝在 dsh-doc 全文没有逐条清单，只在 inspect 事件目录里）。**查事件签名永远走 inspect。**
+**事件签名永远走 inspect**：事件全集不在任何文档里，只在 inspect 的事件目录里。别去文档里找。
 
 ### 第 2 步：`dsh-doc` 文档（机制原则与装配形态）
 
-宿主自带的文档 skill（rc.2 起合并了旧的四份）。它讲机制原则：waterfall 纪律、注册的所有权、`ctx.tools.guard` vs `restrict` 的强弱、projection 性能模型。**它不逐条列 API**——那是 inspect 的事。
+宿主自带的文档 skill。它讲机制原则：waterfall 纪律、注册的所有权、`ctx.tools.guard` vs `restrict` 的强弱、projection 性能模型。**它不逐条列 API**——那是 inspect 的事。
 
-⚠ 可检索副本在 `host-skills/dsh-doc/`（43 文件，可 grep / glob）。读之前先看 `host-skills/PATHS-README.md`——正文里的相对路径按**副本所在目录**解析，不按宿主报的 base。原文在 208MB 的 app.asar 里，shell 工具打不开。
+⚠ 可检索副本在 `host-skills/dsh-doc/`（43 文件，可 grep / glob）。读之前先看 `host-skills/PATHS-README.md`——正文里的相对路径按**副本所在目录**解析，不按宿主报的 base。原文在宿主 app.asar 里（体积见 `host-skills/VERSION.json` 的 `asarBytes`），shell 工具打不开。
 
 若任务涉及界面、设置页或 Slot：顺着副本的 `dsh-doc/SKILL.md` 「Read next」表往下读 `references/ui-plugin.md` 与 `templates/decoration/`（模板含 `./client` 导出与 `window.__ModuleLoader__.load` 起步形态）；验证页面用 `references/verification.md`。这些文件都在包里，不必从零手写界面。
 
@@ -59,7 +65,7 @@ node <本skill目录>/scripts/design-check.mjs <你的插件项目根>
 
 **最有效、也最容易被忘的一招。** inspect 给零件，dsh-doc 给原则，但「这些怎么组合起来能用」只在真实插件里。去 `~\.dsh\profiles\<profile>\node_modules\` 找同类插件的 `lib/`。
 
-> 分量：一次真实开发翻遍 catalog 和源码 200 多次没答案，最后是读一个已发布插件的 `lib/routes.js` 才找到接缝。**查得太多本身就是错**——省上下文只有在它没有引起更多搜索、重复读取或错误时才划算。
+**查得太多本身就是错**：省上下文只有在它没有引起更多搜索、重复读取或错误时才划算。
 
 ### 查完必须产出
 
@@ -72,7 +78,7 @@ node <本skill目录>/scripts/design-check.mjs <你的插件项目根>
 
 **每条关于宿主的断言必须带出处**（探测命令+返回，或安装包 `文件:行`）。读源码得出的结论标 L3，不冒充已验证。
 
-## 二、首装验证：preflight（痛点：「完成」没有权威定义）
+## 首装验证
 
 代码写完、测试全绿 ≠ 装上能用。四类致命失败**全都不在任何一段代码里**，逐段检查看不见：
 
@@ -93,7 +99,7 @@ node <本skill目录>/scripts/preflight.mjs <你的插件项目根>
 
 **preflight 覆盖不了的**：家族④ 只能真机验。用**一次性 profile**（建 → 装 → 验 → 拆，复刻目标环境的完整 bundle 组合，不碰日常 profile）。具体命令随宿主版本变，真跑 `dsh --help` / `dsh plugin --help` 现取。三条语义约束：`--from-default-profile` 是替换语义；不能与 shipped 模板同名；必须先建后装。
 
-## 三、升级保鲜：recheck（痛点二在升级后复发）
+## 升级保鲜
 
 DSH 升级 = 契约与验证清单同时刷新。两个动作。**脚本位置分两种安装形态**（路径不一样，照错形态跑必然 No such file）：
 
@@ -105,32 +111,39 @@ node <本skill目录>/scripts/recheck.mjs --self-test
 node <本skill目录>/scripts/recheck.mjs --touchpoints touchpoints.json --snapshot host-snapshot.json --strict
 ```
 
-**重解脚本**（`<包根>/scripts/reextract.mjs`——只在**源码仓**有，不随 npm 包分发，因为它要读本机 app.asar 的绝对路径）：
+触点清单写法见 `assets/touchpoints.sample.json`；四态判定（OK / MISSING / CHANGED / UNVERIFIABLE）见脚本头部。
+
+**重解脚本**（`<包根>/scripts/reextract.mjs`——只在**源码仓**有，不随 npm 包分发）：
 
 ```bash
 # ① 宿主文档副本是否过期（STALE 判定 + 一键重解）——在源码仓根跑：
-#    git clone https://github.com/wufeng0105/dsh-plugin-kit 后：
 node scripts/reextract.mjs --check
 node scripts/reextract.mjs          # 过期就重解（写回源码仓的 host-skills/，再重装包生效）
 ```
 
-> **为什么重解脚本不进包**：它写的目标是本机 `app.asar` 相关路径与源码仓的 `host-skills/`，装进宿主 profile 的包没有这些上下文。装包形态下副本过期时，回源码仓重解 + 重装一次即可。
+**为什么重解脚本不进包**：它写的是本机 `app.asar` 关联路径与源码仓的 `host-skills/`，装进宿主 profile 的包没有这些上下文。装包形态下副本过期时，回源码仓重解 + 重装一次即可。
 
-触点清单写法见 `assets/touchpoints.sample.json`；四态判定（OK / MISSING / CHANGED / UNVERIFIABLE）见脚本头部。**先跑 `--self-test` 证明它会红，再拿它判真实清单。**
-
-## 四、开发纪律（本仓事故换来的六条，任何插件开发通用）
+## 开发纪律
 
 1. **每条验收必须能判真假**；靠人看的必须给机判替代，否则标「人工判读」。
 2. **每条关于宿主的断言必须带出处**（探测命令+返回，或安装包 `文件:行`）。
 3. **任何检查先证明它会红**，再用它判通过——改坏 → 红 → 改回 → 绿。「测试全绿」是一个状态，不是一项证据。
 4. **模块存在 ≠ 产品在用**：必须证明它在 import 图里可达。
-5. **「无法判定」不是「通过」**。探测不到就标 `UNVERIFIABLE`，写明证据等级（L1 运行时 / L2 行为复现 / L3 源码 / L4 自述）。
+5. **「无法判定」不是「通过」**。探测不到就标 `UNVERIFIABLE`，并写明证据等级。
 6. **交付说明里的命令必须真跑过。**
 
-> 每条都有对应的事故出处（离线全绿真机崩、假绿机、自评盲区）——完整事故表见本包 `CHANGELOG.md` 的 0.1.x 节。
-> 更重的阶段门流程（独立审查员、九阶段）已从本 skill 退役——对单人开发，上面六条 + preflight 覆盖了最高频的坑；审查员协议（三硬要求 / 证据等级 / 任务书）现住源码仓 `README.md` 的「开发纪律」节。
+**证据等级**（每条结论都要标，高等级不能靠低等级冒充）：
 
-## 五、新建一个插件项目
+| 等级 | 形态 | 能证明什么 |
+|---|---|---|
+| **L1 运行时** | 真机安装后实际点击、观察 | 功能真的可用 |
+| **L2 行为复现** | 用真实依赖跑出行为 | 代码路径真的通 |
+| **L3 源码核对** | 读安装包源码、引用行号 | 契约形态对不对 |
+| **L4 自述** | 写的人自己说的 | **什么都不能证明**，只能当线索 |
+
+对单人开发，上面六条 + preflight 覆盖了最高频的坑。派独立审查员的协议（三硬要求 / 证据等级用法 / 任务书模板）见源码仓 `CONTRIBUTING.md`。
+
+## 新建插件项目
 
 **不要从零手写。** 复制骨架：`template/`（5 文件：package.json / cordis.patch.yml / index.js / AGENTS.md / CONTEXT.md）。
 
@@ -140,10 +153,10 @@ node scripts/reextract.mjs          # 过期就重解（写回源码仓的 host-
 4. 跑 `preflight.mjs <项目根>` —— 0 FAIL 后再装
 5. 装一次（`install_bundle`，target 传项目绝对路径），读返回的 `application`——**骨架装得上，才算搭好了**
 
-> 骨架里没有 `.gitignore`。不是漏了——npm 打包总会排除它，放一份会让仓库与包不一致（2026-11-11 实测）。加第一个依赖时自己建。
+骨架里没有 `.gitignore`：npm 打包总会排除它，放一份会让仓库与包不一致。加第一个依赖时自己建。
 
 ## 关键提醒
 
-- **测试全绿 ≠ 验收通过**：本仓 0.2.0 重定义期出现过 111 个测试全绿、仍有 5 项验收无法通过。
+- **测试全绿 ≠ 验收通过**：0.2.0 重定义期曾出现 111 个测试全绿、仍有 5 项验收无法通过。
 - **inspect 是权威源**：任何「宿主支持/不支持 X」的断言，先 query 再写。
-- **证据等级不能冒充**：L3（源码核对）不能写成「已验证」。
+- **证据等级不能冒充**：L3 不能冒充 L1/L2，读源码得出的结论不能写成「已验证」。

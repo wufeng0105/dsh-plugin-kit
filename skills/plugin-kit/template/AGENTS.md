@@ -35,7 +35,7 @@
 2. **preflight**：`node <plugin-kit包>/skills/plugin-kit/scripts/preflight.mjs <项目根>` —— 0 FAIL 才算预检过。
 3. **打包真加载**：`npm pack` 后从 tarball 真加载一次。
 4. **建 `.gitignore`**：加第一个依赖时顺手建——`node_modules/`、`*.tgz`、`*.log`。（骨架没有依赖，所以还没建；骨架里不能预放 `.gitignore`：npm 打包会排除它，仓库与包就对不上了。）
-5. **升级 DSH 后**：跑 `recheck.mjs`（升级复检，`<plugin-kit包>/skills/plugin-kit/scripts/`）；文档副本过期判定用 `reextract.mjs --check`——**该脚本只在 plugin-kit 源码仓有**（不随包分发），用法见 `plugin-kit` skill §三的两态说明。
+5. **升级 DSH 后**：跑 `recheck.mjs`（升级复检，`<plugin-kit包>/skills/plugin-kit/scripts/`）；文档副本过期判定用 `reextract.mjs --check`——**该脚本只在 plugin-kit 源码仓有**（不随包分发），用法见 `plugin-kit` skill 的「升级保鲜」节两态说明。
 
 两个自检分工不互判：design-check 判设计工件（词汇表/ADR/弃用名漂移），preflight 判宿主契约与装败。
 
