@@ -1,6 +1,6 @@
 {
   "name": "@wufeng0105/dsh-plugin-kit",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "module",
   "description": "DSH 插件的一条流水线：设计期定概念与形状（词汇表/ADR 机判）、写代码前查宿主契约的三步顺序、装之前的首装验证、升级后的触点复检，随宿主版本保鲜。",
   "license": "MIT",
