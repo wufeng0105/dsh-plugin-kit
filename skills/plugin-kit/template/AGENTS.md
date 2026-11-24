@@ -1,50 +1,51 @@
 # AGENTS.md
 
-> 本项目是一个 DSH 插件。**骨架已就位，功能未定**——功能定了之后，先把需求写清楚，再动代码。
->
-> **「就位」在这里有明确的完成条件，不是「文件已创建」**：`node --check` 和 `npm pack` 全绿也**证明不了它装得上**。判定它真的就位，只有两条：①`preflight` 零 FAIL；②装一次，读返回里的 `application`。
+> 本项目是 DSH 插件。骨架已就位，功能未定。
 
 ## 开工前
 
-0. **先把占位符全部替换掉**：包名占位符（package.json / cordis.patch.yml / index.js 三处）→ 本项目名；`CONTEXT.md` 首行的名字占位符 → 本项目名；`CONTEXT.md` 的「示例术语」→ 第一条真实术语。改完在你项目里搜一次：包名占位符与名字占位符都必须零残留，否则下面两个门会给出假绿。
+- 设计期开始 → 加载 `domain-modeling`（概念）与 `codebase-design`（结构），按它们的做法做。
+- 复制骨架后 → 替换全部占位符：`package.json`、`cordis.patch.yml`、`index.js` 三处包名占位符，`CONTEXT.md` 首行名字占位符。改完在项目根搜一次，两类占位符零残留。
+- 定第一个术语 → 写进 `CONTEXT.md`，格式 `**术语**：定义`，弃用叫法写 `_Avoid_:`。
+- 要写 ADR → 放 `docs/adr/NNNN-slug.md`，三个条件全占才写：难回头、无上下文会费解、真取舍。
+- 新增导出或模块前 → 答接口三问，答案写进交付说明或 ADR：删掉它复杂度去了哪；接缝另一侧是否有第二个适配器（生产+测试）；依赖是参数传入还是模块内 `new`。
+- 查宿主服务、事件、Config、Slot 或工具 → 用 `cordis_inspect_query`（权威源）。
+- 需要机制原则 → 读 `host-skills/dsh-doc/`（在 plugin-kit 包里）。
+- 需要查契约三步、首装验证、升级保鲜的完整判据 → 加载 `plugin-kit` skill。
+- 要确认某个组合怎么装配 → 找同类真实插件读源码。
+- 写关于宿主的断言 → 附出处（探测命令与返回，或安装包 `文件:行`）。
 
-1. **设计期先加载 `domain-modeling` 与 `codebase-design`**，并把两件事做掉：
-   - **概念**：第一个术语敲定就写进 `CONTEXT.md`（模板已带种子）——`**术语**：定义` + `_Avoid_: 弃用叫法`，一名一物，不攒批；难回头 + 无上下文会费解 + 真取舍三条全占的决策写 `docs/adr/NNNN-slug.md`。
-   - **形状**：动笔前过接口三问（答案写进交付说明或 ADR）——删掉这个导出/模块，复杂度去了哪？接缝另一侧真有第二个适配器（生产+测试）吗？依赖是参数传入还是模块内 `new` 的？
-2. **用 `skill` 工具加载 `plugin-kit`**：查契约的三步顺序、首装验证、升级保鲜都在那里，本文不复述。
-3. **查宿主契约**：`cordis_inspect_query` 是权威源（Service / Event / Config / Tools / Slots），文档副本 `host-skills/dsh-doc/`（在 plugin-kit 包里）讲机制原则，真实运行的同类插件源码讲装配。
-4. **每条关于宿主的断言必须带出处**（探测命令+返回，或安装包 `文件:行`）。
+## 本项目形态
 
-## 最常踩的六条
-
-1. **每条验收必须能判真假**：靠人看的必须给机判替代，否则标「人工判读」。
-2. **每条关于宿主的断言必须带出处**。
-3. **任何检查先证明它会红，再用它判通过**。
-4. **模块存在 ≠ 产品在用**：必须证明它在 import 图里可达。
-5. **「无法判定」不是「通过」**：探测不到就标 `UNVERIFIABLE`，写明证据等级。
-6. **交付说明里的命令必须真跑过**。
-
-## 本项目的形态
-
-- **Host 半**：`inject` 目前是空数组。
-- **加服务**：需要宿主服务才往 `inject` 加，**但只加确实存在的**（inspect 先查）。
-- **配置**：要配置就用 schemastery 的 `Schema.object(...)`；**不要导出普通的 `Config = {}`**。
-- **界面半**：client.js 用 `window.__ModuleLoader__.load({ id, factory })` 形态，**不能有 ESM export/import**——宿主把所有插件的 client.js 拼成一个大脚本加载。
+- 加服务 → 先 inspect 确认存在，再加进 `inject`。
+- 要配置 → 用 schemastery 的 `Schema.object(...)`。
+- 导出配置 → 不写普通对象（`Config = {}` 会崩）。
+- 写 client.js → 用 `window.__ModuleLoader__.load({ id, factory })`。
+- client.js 中 → 不写 ESM `export` / `import`（宿主把全部插件 client.js 拼成一个脚本）。
 
 ## 交付前
 
-1. **design-check**：`node <plugin-kit包>/skills/plugin-kit/scripts/design-check.mjs <项目根>` —— 设计期工件 0 FAIL（首跑必红：种子是格式示例，按补法换成第一条真实术语）。
-2. **preflight**：`node <plugin-kit包>/skills/plugin-kit/scripts/preflight.mjs <项目根>` —— 0 FAIL 才算预检过。
-3. **打包真加载**：`npm pack` 后从 tarball 真加载一次。
-4. **建 `.gitignore`**：加第一个依赖时顺手建——`node_modules/`、`*.tgz`、`*.log`。（骨架没有依赖，所以还没建；骨架里不能预放 `.gitignore`：npm 打包会排除它，仓库与包就对不上了。）
-5. **升级 DSH 后**：跑 `recheck.mjs`（升级复检，`<plugin-kit包>/skills/plugin-kit/scripts/`）；文档副本过期判定用 `reextract.mjs --check`——**该脚本只在 plugin-kit 源码仓有**（不随包分发），用法见 `plugin-kit` skill 的「升级保鲜」节两态说明。
+- 设计期工件 → 跑 `node <plugin-kit包>/skills/plugin-kit/scripts/design-check.mjs <项目根>`，0 FAIL 才继续。
+- 装之前 → 跑 `node <plugin-kit包>/skills/plugin-kit/scripts/preflight.mjs <项目根>`，0 FAIL 才继续。
+- 打包 → 跑 `npm pack`，从 tarball 装一次。
+- 加第一个依赖时 → 建 `.gitignore`，写 `node_modules/`、`*.tgz`、`*.log`。
+- 升级 DSH 后 → 跑 `<plugin-kit包>/skills/plugin-kit/scripts/recheck.mjs`；判文档副本是否过期 → 在 plugin-kit 源码仓根跑 `node scripts/reextract.mjs --check`。
+- design-check 报 FAIL 且提示「示例术语」→ 把 `CONTEXT.md` 的示例术语换成真实术语，这是骨架首跑的预期状态。
 
-两个自检分工不互判：design-check 判设计工件（词汇表/ADR/弃用名漂移），preflight 判宿主契约与装败。
+## 判据
 
-## 不要做
+- 前置命令输出 → 必须真跑过，不引用推断结果。
+- 判「装上了」→ preflight 0 FAIL 且 `install_bundle` 返回成功，两个都满足才算。
+- 判「用得上」→ 装后在宿主里看得到本项目贡献的界面或工具。
+- 检查项 → 先构造一个应失败的输入，确认该项会红，再用它判通过。
+- 模块 → 必须证明它在产品代码的 import 图里可达，存在不算在用。
+- 判不了 → 标 `UNVERIFIABLE` 并写明证据等级：L1 运行时、L2 行为复现、L3 源码核对、L4 自述。
+- 用户可见 → 界面文字只承载功能本身（按钮文字、placeholder、状态反馈）。
 
-- **不要把「测试全绿」当成「验收通过」**。
-- **不要把「无法判定」写成「通过」**。
-- **不要在没跑过的情况下把命令写进交付说明**。
-- **不要猜服务名**：`inject` 写错一个名字，插件永远 pending，宿主当 web boot 失败。
-- **不要在界面上解释功能**：功能即说明——界面文字只属于功能本身（按钮文字、placeholder、状态反馈）；「点击这里可以…」这类话是交互还没做对的信号，把解释做进形态、状态和交互里，别留在屏幕上。
+## 不写
+
+- 把 `npm run check` 全绿当验收通过 → 不写（它不含真机验证）。
+- 把「无法判定」写成「通过」→ 不写。
+- 没跑过的命令写进交付说明 → 不写。
+- 猜服务名 → 不写（名字错，插件永远 pending，宿主当 web boot 失败）。
+- 界面上写「点击这里可以…」类解释 → 不写（交互没做对才需要解释）。
