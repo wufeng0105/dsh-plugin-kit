@@ -56,22 +56,24 @@ function bump(version, kind) {
 
 // ---------------------------------------------------------------- 一致性核对
 
-function checkState({ requireClean = true } = {}) {
+function checkState({ requireClean = true, targetVersion = null } = {}) {
   const pkg = JSON.parse(readFileSync(PKG, 'utf8'));
   const version = pkg.version;
+  // 要发布的版本：升版时为「下一个版本」，--check 时为当前版本。
+  const target = targetVersion ?? version;
 
-  console.log(`版本：${pkg.name}@${version}\n`);
+  console.log(`版本：${pkg.name}@${version}${target === version ? '' : ` → 目标 ${target}`}\n`);
 
   // ① 版本号格式
-  ok(SEMVER.test(version), `version 是纯 x.y.z（${version}）`, 'npm 不接受 0.2.0-rc.1 之外的任意后缀用于 latest');
+  ok(SEMVER.test(target), `目标版本是纯 x.y.z（${target}）`, '版本号只能是 x.y.z 三段');
 
   // ② CHANGELOG 有对应节（否则 tag 消息空、用户看不到改了什么）
   const changelog = readFileSync(join(ROOT, 'CHANGELOG.md'), 'utf8');
-  ok(changelog.includes(`## [${version}]`), `CHANGELOG 有 [${version}] 这一节`, `在 CHANGELOG.md 加 "## [${version}] - YYYY-MM-DD" 小节`);
+  ok(changelog.includes(`## [${target}]`), `CHANGELOG 有 [${target}] 这一节`, `在 CHANGELOG.md 加 "## [${target}] - YYYY-MM-DD" 小节`);
 
   // ③ 已有同名 tag 视为冲突（防止重复发布同一个版本）
-  const tags = run('git', ['tag', '-l', `v${version}`]);
-  ok(tags === '', `tag v${version} 尚未存在`, `已存在则先删：git tag -d v${version}（已推送的要 git push origin :refs/tags/v${version}）`);
+  const tags = run('git', ['tag', '-l', `v${target}`]);
+  ok(tags === '', `tag v${target} 尚未存在`, `已存在则先删：git tag -d v${target}（已推送的要 git push origin :refs/tags/v${target}）`);
 
   // ④ 工作树干净（打包内容必须来自已提交的树）
   if (requireClean) {
@@ -100,7 +102,7 @@ function checkState({ requireClean = true } = {}) {
   let published = '';
   let queryFailed = '';
   try {
-    published = run('npm', ['view', `${pkg.name}@${version}`, 'version', '--registry=https://registry.npmjs.org/'], { shell: true });
+    published = run('npm', ['view', `${pkg.name}@${target}`, 'version', '--registry=https://registry.npmjs.org/'], { shell: true });
   } catch (error) {
     const stderr = String(error?.stderr ?? '');
     const code = error?.status ?? error?.code ?? '';
@@ -109,7 +111,7 @@ function checkState({ requireClean = true } = {}) {
     published = ''; // 404 = 尚未发布，是正常状态
   }
   ok(queryFailed === '', `npm 版本查询可用${queryFailed === '' ? '' : `（${queryFailed}）`}`, '查询失败时不能判定「尚未发布」——检查网络/registry 配置后重跑');
-  ok(published === '', `npm 上还没有 ${version}`, published !== '' ? `npm 上已有 ${version}——改版本号再发（同版本不可覆盖）` : '');
+  ok(published === '', `npm 上还没有 ${target}`, published !== '' ? `npm 上已有 ${target}——改版本号再发（同版本不可覆盖）` : '');
 
   // ⑦ repository 字段指回本仓（npm ↔ GitHub 关联、市场下载量统计依赖它）
   ok(
@@ -118,7 +120,7 @@ function checkState({ requireClean = true } = {}) {
     'package.json 的 repository.url 必须是 git+https://github.com/wufeng0105/dsh-plugin-kit.git',
   );
 
-  return { pkg, version };
+  return { pkg, version, target };
 }
 
 // ---------------------------------------------------------------- 主流程
@@ -129,7 +131,12 @@ function main() {
   const kind = args.find((a) => ['patch', 'minor', 'major'].includes(a));
 
   console.log('发布前核对\n');
-  const { pkg, version } = checkState({ requireClean: !checkOnly });
+  // 核对要针对**将要发布的新版本**，不是当前版本。
+  // 曾经用当前版本核对：只要当前版本已经发布过（正常状态），
+  // 「npm 上没有该版本」和「tag 尚未存在」必然 FAIL，于是永远升不了版。
+  const currentVersion = JSON.parse(readFileSync(PKG, 'utf8')).version;
+  const targetVersion = kind ? bump(currentVersion, kind) : null;
+  const { pkg, version } = checkState({ requireClean: !checkOnly, targetVersion });
   console.log('');
 
   if (checkOnly) {
