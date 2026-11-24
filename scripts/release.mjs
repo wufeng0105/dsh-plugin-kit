@@ -89,12 +89,26 @@ function checkState({ requireClean = true } = {}) {
   if (behind !== '') ok(behind === '0', '本地没有未推送的提交', `有 ${behind} 个提交未推送：git push origin main`);
 
   // ⑥ npm 上该版本是否已存在（存在就不能再发，同版本不可覆盖）
+  //
+  // 注意两种失败必须区分开，否则会假绿：
+  //   - 查询成功但包/版本不存在 → npm 退出码非 0，这是「尚未发布」，正常
+  //   - 查询本身跑不起来（npm 不在 PATH、网络断）→ 这是「判不了」，必须 FAIL
+  // 2026-11-24 实测过后者：Windows 上 execFileSync('npm') 不加 shell 会 ENOENT，
+  // 异常被吞后一律当成「尚未发布」，于是已发布过的版本也判 PASS。
+  // 解法：npm 在 Windows 上是 .cmd，Node 直接 execFile 会 ENOENT/EINVAL，
+  // 只有经 shell 才能跑；参数是包名+版本号常量，不含用户输入。
   let published = '';
+  let queryFailed = '';
   try {
-    published = run('npm', ['view', `${pkg.name}@${version}`, 'version', '--registry=https://registry.npmjs.org/']);
-  } catch {
+    published = run('npm', ['view', `${pkg.name}@${version}`, 'version', '--registry=https://registry.npmjs.org/'], { shell: true });
+  } catch (error) {
+    const stderr = String(error?.stderr ?? '');
+    const code = error?.status ?? error?.code ?? '';
+    const notFound = /E404|404 Not Found|is not in this registry|No match found/i.test(stderr);
+    if (!notFound) queryFailed = `${code} ${stderr.split('\n')[0]}`.trim();
     published = ''; // 404 = 尚未发布，是正常状态
   }
+  ok(queryFailed === '', `npm 版本查询可用${queryFailed === '' ? '' : `（${queryFailed}）`}`, '查询失败时不能判定「尚未发布」——检查网络/registry 配置后重跑');
   ok(published === '', `npm 上还没有 ${version}`, published !== '' ? `npm 上已有 ${version}——改版本号再发（同版本不可覆盖）` : '');
 
   // ⑦ repository 字段指回本仓（npm ↔ GitHub 关联、市场下载量统计依赖它）
