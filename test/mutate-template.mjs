@@ -42,7 +42,7 @@ const muts = [
   {
     name: 'AGENTS.md 删掉 preflight 指路',
     file: TPL + '/AGENTS.md',
-    find: '2. `node <plugin-kit包>/skills/plugin-kit/scripts/preflight.mjs <项目根>` —— 0 FAIL 才算预检过',
+    find: '2. **preflight**：`node <plugin-kit包>/skills/plugin-kit/scripts/preflight.mjs <项目根>` —— 0 FAIL 才算预检过。',
     replace: '2. 装前不用检查',
     expect: 'scripts/preflight.mjs',
   },
@@ -56,7 +56,7 @@ const muts = [
   {
     name: 'AGENTS.md 删掉 design-check 指路',
     file: TPL + '/AGENTS.md',
-    find: '1. `node <plugin-kit包>/skills/plugin-kit/scripts/design-check.mjs <项目根>` —— 设计期工件 0 FAIL（首跑必红：种子是格式示例，按补法换成第一条真实术语）',
+    find: '1. **design-check**：`node <plugin-kit包>/skills/plugin-kit/scripts/design-check.mjs <项目根>` —— 设计期工件 0 FAIL（首跑必红：种子是格式示例，按补法换成第一条真实术语）。',
     replace: '1. 设计期不用检查',
     expect: 'design-check.mjs',
   },
