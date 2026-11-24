@@ -177,7 +177,7 @@ $env:HTTPS_PROXY='<你的代理地址>'; npm view <pkg>
 
 ### 守卫测试
 
-`npm run check` 是唯一的全量验证入口。它跑六组：单元测试、打包守卫、骨架守卫、模板端到端、自包含、README 断言、三个变异套件。
+`npm run check` 是唯一的全量验证入口。它先对七个入口文件逐个跑 `node --check`（`index.js`、`lib/skill-provider.js`、三个 skill 脚本、`reextract.mjs`、`verify-publish.mjs`），再跑七个套件：`test`（单元）、`packed`（打包守卫）、`template`（骨架守卫）、`template-e2e`（模板端到端）、`selfcontained`（自包含）、`claims`（README 断言）、`mutate`（三个变异套件）。
 
 **改文档后必须跑**：`node test/readme-claims.mjs`。它断言 README 与 SKILL.md 里的事实与代码一致——文档说的和代码做的不一致就变红。
 
