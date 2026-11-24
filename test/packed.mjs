@@ -192,10 +192,16 @@ test('打包守卫：判据里的引用，指向的文件必须在 tarball 里',
 
 // ---------------------------------------------------------------- 证据不进包
 
-test('打包守卫：evidence/ 与 test/e2e 不进包（证据与真机脚本不属于发布物）', () => {
+test('打包守卫：evidence/ 与 test/ 不进包（证据与验证脚本不属于发布物）', () => {
   const { files } = packed();
-  const leaked = [...files].filter((p) => p.startsWith('evidence/') || p.startsWith('test/e2e/'));
+  // 断言整个 test/ 与 evidence/ 都不进包。不写死 `test/e2e/`——那个目录已删除，
+  // 写死会让这条守卫变成空真（过滤结果永远为空，证明不了任何事）。
+  const leaked = [...files].filter((p) => p.startsWith('evidence/') || p.startsWith('test/'));
   assert.deepEqual(leaked, [], `这些不该进包：${JSON.stringify(leaked)}`);
+  // 反向证明这条守卫真的在筛东西：包内文件非空，且确有 skills/ 下的东西。
+  // 注意 files 是 Set，用 .size 不是 .length。
+  assert.ok(files.size > 0, '打包清单为空——守卫无法判定');
+  assert.ok([...files].some((p) => p.startsWith('skills/')), '包内应有 skills/ 内容');
 });
 
 test('打包守卫：lib/ 进包（Host 半要能跑），退役文件不进包', () => {

@@ -5,7 +5,13 @@
 
 ## [Unreleased]
 
-（无）
+### 清理：删除已与产品脱钩的死代码（2026-11-24）
+
+- **删除 `test/e2e/run.mjs`（455 行）**。它不在任何 npm script 里，也从不进包（`npm run check` 从未跑过它）。六个用例中：`load` 期望答案是「9 阶段卡」、`discipline` 期望 systemPrompt 含 `.stage-gate.json`、`block`/`allow`/`nomarker` 全在构造 `.stage-gate.json` 与 `GATE.json` 测门拦截——测的全是已删除的机制；`catalog` 仍有意义但已被 `判据:可扫出` 覆盖。文件头还引用不存在的 `references/evidence.md`。
+- **`打包守卫`从「`test/e2e/` 不进包」拓宽为「整个 `test/` 与 `evidence/` 不进包」**。原断言写死了一个已删除的目录，过滤结果恒为空 = 空真；同时补了反向断言（包内文件非空、确有 `skills/` 内容）。正反两向已验证：把 `test` 塞进 `files` 会红，还原后绿。
+- **`.gitignore` 删掉 `.zhll/`**：那是已退役机制的草稿区，目录从未存在过，描述里还写着「gates 原始输出」。
+
+**保留**：`evidence/skills-v1-history.bundle`（35KB）看似冗余，但经核实**不是**——它对应的 `legacy-skill-only` tag 只在远端、本地未 fetch，这份 bundle 是离线查看那段历史的唯一途径。
 
 ## [0.4.0] - 2026-11-24
 
