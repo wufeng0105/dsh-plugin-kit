@@ -15,7 +15,7 @@
  *
  * 退出码：0 全 PASS 或仅 UNVERIFIABLE；1 有 FAIL；2 用法错误
  *
- * 自检：node preflight.mjs --self-test   （内建假项目，含 4 个注入缺陷，证明会红）
+ * 自检：node preflight.mjs --self-test   （内建假项目，10 条断言：7 条注入缺陷 + 3 条判据，证明会红）
  *
  * 四大失败家族（出处：本仓 CHANGELOG 2026-11-10 崩溃事故与真机记录）：
  *   ① 装不上          缺 dsh.bundle.patch / 行 id 与包名不一致 / Config 是普通对象 / inject 猜了不存在的服务

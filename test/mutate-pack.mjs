@@ -151,6 +151,47 @@ const results = [];
   });
 }
 
+// ---- 变异 6（2026-11-24 审计补）：删掉 README 指向 SKILL.md 的失败家族链接 →
+// readme-claims 的「面:四家族正典」必须红。
+// 起因：该守卫原先只查「README 含『首装验证』四个字」，而那个词在 README 里出现多次，
+// 删掉整条指路照样命中——六个 `面:*` 守卫从来没有过变红证明，所以空真一直没被发现。
+{
+  const f = `${ROOT}/README.md`;
+  const orig = readFileSync(f, 'utf8');
+  // 把链接退化成裸文件名：指路关系没了，但「SKILL.md」这个词还在。
+  const patched = orig.replace(
+    /\[`SKILL\.md` 的「首装验证」与四大失败家族\]\(skills\/plugin-kit\/SKILL\.md\)/,
+    '`SKILL.md`',
+  );
+  const changed = patched !== orig;
+  writeFileSync(f, patched, 'utf8');
+  const r = run('node --test test/readme-claims.mjs');
+  writeFileSync(f, orig, 'utf8');
+  results.push({
+    name: 'README 拆掉失败家族指路',
+    injected: changed,
+    red: !r.ok,
+    detail: changed ? (r.ok ? '仍绿 ← 空真' : '变红 ✓') : '注入失败',
+  });
+}
+
+// ---- 变异 7（2026-11-24 审计补）：把六条纪律整段贴回 README → 「面:纪律单源」必须红
+{
+  const f = `${ROOT}/README.md`;
+  const orig = readFileSync(f, 'utf8');
+  const patched = `${orig}\n\n## 纪律（注入）\n\n1. 每条验收必须能判真假。\n2. 每条关于宿主的断言必须带出处。\n3. 任何检查先证明它会红。\n4. 模块存在 ≠ 产品在用。\n5. 「无法判定」不是「通过」。\n6. 交付说明里的命令必须真跑过。\n`;
+  const changed = patched !== orig;
+  writeFileSync(f, patched, 'utf8');
+  const r = run('node --test test/readme-claims.mjs');
+  writeFileSync(f, orig, 'utf8');
+  results.push({
+    name: 'README 复述六条纪律',
+    injected: changed,
+    red: !r.ok,
+    detail: changed ? (r.ok ? '仍绿 ← 空真' : '变红 ✓') : '注入失败',
+  });
+}
+
 console.log('\n=== 变异结果 ===');
 let allRed = true;
 for (const r of results) {

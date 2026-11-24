@@ -1,7 +1,12 @@
 /**
- * 从当前运行的宿主 inspect 结果生成本仓真实的 touchpoints.json + host-snapshot.json。
- * 用途：DSH 升级后跑 recheck 做触点复检。
- * 数据来源：cordis_inspect_query（本文件不联网、不读 DSH_HOME，只写仓库内 assets/）。
+ * 把本仓记录的宿主触点写成 assets/touchpoints.json + host-snapshot.json。
+ *
+ * ⚠ 本脚本**不查询宿主**。它把 `SNAPSHOT` 常量（人工用 cordis_inspect_query 实测后
+ * 整理的字面量）与 `host-skills/VERSION.json` 里的版本号拼起来写出去。
+ *
+ * 因此它的产物只能证明「这份记录在形式上自洽」，**不能证明「当前宿主真的是这样」**。
+ * 要确认后者，必须人工跑一次 cordis_inspect_query 比对 SNAPSHOT 里的条目；
+ * `recheck` 拿它当输入时，判的是「代码有没有偏离这份记录」，不是「宿主有没有变」。
  */
 import { writeFileSync, readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
@@ -28,11 +33,11 @@ if (HOST_VERSION === 'unknown') {
 
 // ---- 宿主快照：只记我们真正依赖的条目（在 rc.3 上用 inspect 实测后手填结构化）----
 const snapshot = {
-  _comment: '本仓依赖的宿主触点快照。由 scripts/gen-host-snapshot.mjs 从 cordis_inspect_query 的结果整理；升级后重跑它对比。',
+  _comment: '本仓依赖的宿主触点快照。SNAPSHOT 是人工用 cordis_inspect_query 实测后整理的字面量（本脚本不查询宿主）；升级后须人工重新 inspect 比对，不能只重跑本脚本。',
   host: {
     version: HOST_VERSION,
     exportedAt: new Date().toISOString(),
-    source: 'cordis_inspect_query（host Service.listService / Event.listEvents / Config.listConfigs）',
+    source: '人工 cordis_inspect_query 实测整理（host Service.listService / Event.listEvents / Config.listConfigs）',
   },
   services: {
     skills: {

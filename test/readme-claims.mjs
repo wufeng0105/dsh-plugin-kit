@@ -347,16 +347,22 @@ claim('E2E4', 'README 写明重解与 preflight 怎么跑', () => {
 // 这组断言看守「唯一现状文档」的完整性——四家族 / 退役词 / 证据等级 / 链接。
 // CONTEXT.md 与 reviewer.md 已删，README 是它们内容的唯一现行住址，漂移即失守。
 
-claim('面:四家族正典', '四大失败家族的正典在 SKILL.md，README 按名指路不复述', () => {
+claim('面:四家族正典', '四大失败家族的正典在 SKILL.md，README 用链接按名指路', () => {
   const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
   const skill = readFileSync(join(SKILL_DIR, 'SKILL.md'), 'utf8');
   for (const family of ['装不上', '装上了但看不见', '一加载就崩', '环境相关']) {
     assert.ok(skill.includes(family), `SKILL.md 缺失败家族「${family}」`);
   }
-  // README 指到 SKILL.md 的「首装验证」节即可；不得整表复述（一体成文：一处说清）。
-  // 锚用节名而不是 §编号：编号会随排版变，节名是语义。
-  assert.ok(/首装验证/.test(readme), 'README 必须按名指路 SKILL.md 的「首装验证」节');
-  return '正典在 SKILL.md，README 按名指路';
+  // 必须是一条**真的 markdown 链接**，且链接目标存在、链接文本点名了那个节。
+  // 只查「README 含『首装验证』四个字」是空真：那个词在 README 里出现多次，
+  // 删掉指路句之后照样命中（2026-11-24 审计实验证明）。
+  const links = [...readme.matchAll(/\[([^\]]+)\]\(([^)]+SKILL\.md[^)]*)\)/g)];
+  const pointed = links.some((m) => /首装验证|失败家族/.test(m[1]));
+  assert.ok(pointed, 'README 必须有一条链接，其链接文本点名「首装验证」/「失败家族」并指向 SKILL.md');
+  for (const m of links) {
+    assert.ok(existsSync(join(ROOT, m[2])), `README 的 SKILL.md 链接目标不存在：${m[2]}`);
+  }
+  return `${links.length} 条 SKILL.md 链接，其中至少一条点名失败家族`;
 });
 
 claim('面:证据等级双落点', 'L1–L4 定义在 SKILL.md（随包，模型要读），CONTRIBUTING 留可读副本', () => {
@@ -376,17 +382,19 @@ claim('面:证据等级双落点', 'L1–L4 定义在 SKILL.md（随包，模型
   return '定义在 SKILL.md，副本在 CONTRIBUTING';
 });
 
-claim('面:纪律单源', '六条纪律锚点在 SKILL.md，README 按名指路不复述', () => {
+claim('面:纪律单源', '六条纪律锚点在 SKILL.md，README 不得整段复述', () => {
   const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
   const skill = readFileSync(join(SKILL_DIR, 'SKILL.md'), 'utf8');
   const anchors = ['能判真假', '必须带出处', '证明它会红', '产品在用', '无法判定', '必须真跑过'];
   for (const a of anchors) {
     assert.ok(skill.includes(a), `SKILL.md 缺纪律锚点「${a}」`);
   }
-  // README 正文不展开六条；只要它在讲失败家族时指向 SKILL.md 即可。
-  // 锚用文件名而不是 §编号。
-  assert.ok(/SKILL\.md/.test(readme), 'README 必须指路 SKILL.md');
-  return '正典在 SKILL.md，README 指路';
+  // 反空真：不许用「README 里出现过 SKILL.md 这个文件名」当指路证据——
+  // 产品组成表和目录树里都有裸文件名，删掉真正的指路也照样命中（2026-11-24 审计实验证明）。
+  // 真正的判据是：README 不得把六条纪律整段复述回来（那才是双源）。
+  const repeated = anchors.filter((a) => readme.includes(a));
+  assert.ok(repeated.length <= 1, `README 又把纪律条目写回来了（双源）：${JSON.stringify(repeated)}`);
+  return `SKILL.md 六锚点齐；README 仅命中 ${repeated.length} 条`;
 });
 
 claim('面:链接存在', 'README 的每个仓库内相对链接都真实存在（不出死链）', () => {

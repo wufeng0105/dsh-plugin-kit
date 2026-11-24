@@ -38,6 +38,8 @@ node <本skill目录>/scripts/design-check.mjs <你的插件项目根>
 
 词汇表格式、ADR 命名/正文、标识符样式的弃用名（含 `_` / `.` / `/` 的旧词）出现在正文里都判 FAIL；普通弃用词只提示。首跑必红（模板种子是格式示例）——按补法换成第一条真实术语即绿。
 
+⚠ **改 design-check 的判定格式时，只能加宽，不能收紧。** 词汇表条目格式、ADR 命名规则一旦随 npm 包分发到用户项目，就是他们的公共契约：收紧（例如改条目语法、要求新的必填字段）会让既有用户仓突然判红。兼容旧格式是硬要求，不是风格偏好。
+
 **三个脚本的分工（不互判）**：设计期跑 design-check（定概念与形状）；装前跑 preflight（判宿主契约与装败）；升级后跑 recheck（判触点漂移）。
 
 ## 查契约的三步
@@ -111,7 +113,7 @@ node <本skill目录>/scripts/recheck.mjs --self-test
 node <本skill目录>/scripts/recheck.mjs --touchpoints touchpoints.json --snapshot host-snapshot.json --strict
 ```
 
-触点清单写法见 `assets/touchpoints.sample.json`；四态判定（OK / MISSING / CHANGED / UNVERIFIABLE）见脚本头部。
+触点清单写法见 `assets/touchpoints.sample.json`；四态判定（OK / MISSING / CHANGED / UNVERIFIABLE）见脚本头部，加 `--scan-dir <你的源码目录>` 时另有第五态 DRIFT（代码里已经不再引用某个触点，说明清单该删条目了）。
 
 **重解脚本**（`<包根>/scripts/reextract.mjs`——只在**源码仓**有，不随 npm 包分发）：
 
@@ -141,14 +143,17 @@ node scripts/reextract.mjs          # 过期就重解（写回源码仓的 host-
 | **L3 源码核对** | 读安装包源码、引用行号 | 契约形态对不对 |
 | **L4 自述** | 写的人自己说的 | **什么都不能证明**，只能当线索 |
 
-对单人开发，上面六条 + preflight 覆盖了最高频的坑。派独立审查员的协议（三硬要求 / 证据等级用法 / 任务书模板）见源码仓 `CONTRIBUTING.md`。
+对单人开发，上面六条 + preflight 覆盖了最高频的坑。要另开一个独立审查员交叉验证，三条硬要求是：不许只照抄实现者给的判定式（至少一条自己从需求原文推导）；至少一条真宿主观察（不接受全程沙箱跑脚本）；报告必须有「用户可见面」小节。每条结论标证据等级，L4 自述不算结论。
 
 ## 新建插件项目
 
 **不要从零手写。** 复制骨架：`template/`（5 文件：package.json / cordis.patch.yml / index.js / AGENTS.md / CONTEXT.md）。
 
 1. 整目录复制到项目根
-2. 把占位符 `my-plugin` 全部替换成本项目名（三处同步，改完搜一次 `my-plugin` 必须零残留）；顺手把 `CONTEXT.md` 的「示例术语」换成第一条真实术语（design-check 首跑必红是设计期第一步）
+2. 把占位符全部替换掉（改完在你项目里搜一次，两类占位符都必须零残留）：
+   - 包名占位符 → 本项目名，三处：package.json / cordis.patch.yml / index.js
+   - `CONTEXT.md` 首行的名字占位符 → 本项目名
+   - `CONTEXT.md` 的「示例术语」→ 第一条真实术语（design-check 首跑必红是设计期第一步）
 3. 跑 `design-check.mjs <项目根>` —— 0 FAIL 后再进装前自检
 4. 跑 `preflight.mjs <项目根>` —— 0 FAIL 后再装
 5. 装一次（`install_bundle`，target 传项目绝对路径），读返回的 `application`——**骨架装得上，才算搭好了**

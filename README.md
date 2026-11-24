@@ -1,6 +1,6 @@
 # dsh-plugin-kit
 
-> **一条流水线，四段**：设计期定概念与形状 → 写代码前查宿主契约 → 装之前首装自检 → 升级后触点复检。前两段住 skill 正文，后两段是脚本。
+> **一条流水线，四段**：设计期定概念与形状 → 写代码前查宿主契约 → 装之前首装自检 → 升级后触点复检。查契约等判据住在 skill 正文里，三段自检是随包分发的脚本，重解脚本只在源码仓。
 
 装它，`plugin-kit` 这个 skill 自动出现在你的 skill 目录里。
 
@@ -29,10 +29,10 @@
 |---|---|---|
 | **SKILL.md** | `skills/plugin-kit/` | 判据正文：查契约三步顺序、四大失败家族、开发纪律六条 |
 | **preflight.mjs** | `skills/plugin-kit/scripts/` | 首装自检：四大失败家族逐条核查，输出 PASS / FAIL / UNVERIFIABLE，FAIL 附「缺什么、怎么补」 |
-| **recheck.mjs** | `skills/plugin-kit/scripts/` | 升级复检：拿触点清单对照宿主快照，输出 OK / MISSING / CHANGED / UNVERIFIABLE 四态 |
+| **recheck.mjs** | `skills/plugin-kit/scripts/` | 升级复检：拿触点清单对照宿主快照，输出 OK / MISSING / CHANGED / UNVERIFIABLE 四态；带 `--scan-dir` 时另有 DRIFT（你的代码已不再引用某个触点） |
 | **design-check.mjs** | `skills/plugin-kit/scripts/` | 设计期核查：词汇表格式、ADR 命名/正文、标识符样式的弃用名漂移；FAIL 附「缺什么、怎么补、依据」 |
 | **reextract.mjs** | `scripts/`（仅源码仓） | asar 解析与宿主文档重解：`--check` 过期判定 + 一键重解；不随 npm 包分发 |
-| **gen-host-snapshot.mjs** | `scripts/`（仅源码仓） | 从当前宿主 inspect 结果生成触点清单与宿主快照 |
+| **gen-host-snapshot.mjs** | `scripts/`（仅源码仓） | 把仓内一份人工整理的触点记录写成 `touchpoints.json` / `host-snapshot.json`。**不查询宿主**——宿主变了要人工重新 inspect |
 | **Host 半** | `index.js` + `lib/skill-provider.js` | 只做一件事：把 `skills/` 注册进宿主 skill 目录。无用户配置、无事件监听、无工具注册 |
 
 Host 半的三个承重细节，每条都来自真机事故：
@@ -47,13 +47,16 @@ Host 半的三个承重细节，每条都来自真机事故：
 dsh-plugin-kit/
 ├── index.js                 Host 半：只做 skill provider 注册
 ├── lib/skill-provider.js    skill 扫描与定义校验
+├── cordis.patch.yml         宿主识别本插件的入口（package.json 的 dsh.bundle.patch 指向它）
 ├── skills/plugin-kit/       产品本体
 │   ├── SKILL.md             判据正文（装进宿主的就是它）
 │   ├── scripts/             preflight.mjs / recheck.mjs / design-check.mjs（随包分发）
 │   ├── template/            新插件项目骨架（5 文件：含词汇表种子 CONTEXT.md）
-│   ├── assets/              触点清单 / 宿主快照样例
+│   ├── assets/              触点清单 / 宿主快照（真实 + 样例）
 │   └── host-skills/         dsh-doc 副本 + VERSION.json
 ├── scripts/                 reextract.mjs / gen-host-snapshot.mjs / release.mjs（仅源码仓）
+├── locale/                  插件管理面板的多语言文案（随包分发）
+├── icon.svg                 插件图标
 ├── evidence/                凭据：真机存证、审计、探针脚本
 ├── test/                    全部验证入口见 npm run check
 ├── CONTRIBUTING.md          维护者入口：发布流程、开发纪律、禁用语
@@ -75,7 +78,7 @@ plugin_manager install_bundle target=<本目录绝对路径>
 装完验证（headless 模式看不到日志，用这两条确认插件在工作）：
 
 - skill 目录里出现 `plugin-kit`：让模型列出可用 skill，应含 `plugin-kit`。
-- 启动日志应有两行 info：`[plugin-kit] v<版本> 已加载 → cwd=…` 与 `skill provider 已注册 → name=plugin-kit root=…`。有一条 `error`（「打包缺失：skills/ 目录不存在」）就说明插件是残的。
+- 启动日志应有两行 info：`[plugin-kit] v<版本> 已加载 → cwd=…` 与 `[plugin-kit] skill provider 已注册 → name=plugin-kit root=…`。有一条 `error`（「打包缺失：skills/ 目录不存在」）就说明插件是残的。
 
 ## 设计期：定概念与形状（写代码之前）
 
@@ -87,10 +90,13 @@ plugin_manager install_bundle target=<本目录绝对路径>
 **接口三问**（动笔前，答案写进交付说明或 ADR）：删掉这个导出/模块，复杂度去了哪？接缝另一侧真有第二个适配器（生产+测试）吗？依赖是参数传入还是模块内 `new` 的？
 
 ```bash
-node skills/plugin-kit/scripts/design-check.mjs <你的插件项目根>
+# 三个脚本都随包分发，在你的项目根跑（把 <plugin-kit包> 换成装好的路径）
+node <plugin-kit包>/skills/plugin-kit/scripts/design-check.mjs <你的插件项目根>
 ```
 
 词汇表格式、ADR 命名/正文、标识符样式的弃用名（含 `_` / `.` / `/` 的旧词）出现在正文里判 FAIL；普通弃用词只提示。首跑必红（种子是格式示例）——按补法换成第一条真实术语即绿。三个脚本分工不互判：设计期 design-check / 装前 preflight / 升级后 recheck。
+
+> 判定格式是**用户项目的公共契约**：改 `design-check` 的条目格式或 ADR 命名规则时只能加宽、不能收紧，否则既有用户仓会突然判红。详见 [`SKILL.md` 的设计期核查](skills/plugin-kit/SKILL.md)。
 
 ## 查契约的三步（摘要在 skill 正文）
 
@@ -102,11 +108,11 @@ node skills/plugin-kit/scripts/design-check.mjs <你的插件项目根>
 
 ## 首装验证：preflight
 
-代码写完、测试全绿 ≠ 装上能用。四类致命失败**全都不在任何一段代码里**，逐段检查看不见——完整判定式见 [`SKILL.md`](skills/plugin-kit/SKILL.md) 的「首装验证」节，此处不复述。
+代码写完、测试全绿 ≠ 装上能用。四类致命失败**全都不在任何一段代码里**，逐段检查看不见——完整判定式与对照表见 [`SKILL.md` 的「首装验证」与四大失败家族](skills/plugin-kit/SKILL.md)，此处不复述。
 
 ```bash
 # 装之前、每次交付前
-node skills/plugin-kit/scripts/preflight.mjs <你的插件项目根>
+node <plugin-kit包>/skills/plugin-kit/scripts/preflight.mjs <你的插件项目根>
 ```
 
 - 逐项输出 `PASS / FAIL / UNVERIFIABLE`，FAIL 附「缺什么、怎么补」。
@@ -129,12 +135,15 @@ node scripts/reextract.mjs
 **升级复检**（`recheck.mjs` 随包分发，两态都有；拿触点清单对照宿主快照）：
 
 ```bash
-# 先生成当前宿主的快照与触点清单（仓库内，不联网）
-node scripts/gen-host-snapshot.mjs
-node skills/plugin-kit/scripts/recheck.mjs \
-  --touchpoints skills/plugin-kit/assets/touchpoints.json \
-  --snapshot  skills/plugin-kit/assets/host-snapshot.json --strict
+# recheck 随包，在你的项目根跑，指到你自己的清单与快照
+node <plugin-kit包>/skills/plugin-kit/scripts/recheck.mjs \
+  --touchpoints <你的触点清单.json> \
+  --snapshot  <你的宿主快照.json> --strict
 ```
+
+清单与快照的结构样例在包的 `skills/plugin-kit/assets/` 下（`touchpoints.sample.json` / `host-snapshot.sample.json`）。
+
+⚠ **快照要你自己用 `cordis_inspect_query` 实测后填。** 源码仓里的 `gen-host-snapshot.mjs` 只是把仓库内一份人工整理的记录写成 JSON，**它不查询宿主**——重跑它不能证明宿主变了还是没变。
 
 两个脚本都自带 `--self-test`，先跑它证明判定式会红。
 
@@ -145,6 +154,7 @@ node skills/plugin-kit/scripts/recheck.mjs \
 | preflight 是静态检查 | 它判不了运行时行为——装完后的实际可见性仍需一次性 profile 真机验证 |
 | 「环境相关」家族 UNVERIFIABLE | 插件间冲突只能真机验（复刻完整 bundle 组合的一次性 profile） |
 | 文档副本会过期 | 宿主升级后在**源码仓**跑 `node scripts/reextract.mjs --check`（该脚本不随 npm 包分发）；不做激活时自动同步（拿稳定性换新鲜度不划算） |
+| 触点快照不自动更新 | `gen-host-snapshot.mjs`（仅源码仓）只是写出仓内那份人工整理的记录，**它不查宿主**。宿主真变了要人工 `cordis_inspect_query` 重新比对；`recheck` 判的是「你的代码有没有偏离这份记录」 |
 | inspect 不可达时判不了 | 没有宿主运行时，契约只能读到 L3（源码核对），不冒充已验证 |
 | design-check 只判工件格式与特征词漂移 | 接口深度、接缝位置、依赖注入是人工判读（UNVERIFIABLE 给判法）；入口导出面归 preflight 判 |
 | 证据边界 | 「四大失败家族」是单作者事故史归纳，「换人也遇到」未验证 |
@@ -153,7 +163,7 @@ node skills/plugin-kit/scripts/recheck.mjs \
 
 - **升级**：`plugin_manager install_bundle target=<新包路径>`，启动日志版本号会变。
 - **卸载**：`dsh plugin --profile <profile> remove @wufeng0105/dsh-plugin-kit`——不删你项目的任何文件。
-- **从更早的旧包名 `@wufeng0105/dsh-stage-gate` 迁移**：必须先卸旧再装新（旧包若仍在 profile 中，两套 bundle 行并存会双重注册）。
+- **迁移**：若 profile 里同时装着本包与任何旧包名的同源插件，**先卸旧再装新**——两套 bundle 行并存会双重注册。
 
 ## 词汇表
 
